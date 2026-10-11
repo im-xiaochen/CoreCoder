@@ -2,7 +2,7 @@
 
 # CoreCoder
 
-**The nanoGPT of coding agents. A 1.3k-line engine inside 2,735 readable lines of pure Python: understand how a coding agent actually works, then fork your own.**
+**The nanoGPT of coding agents. A 2.2k-line engine inside 4,702 readable lines of pure Python: understand how a coding agent actually works, then fork your own.**
 
 *learn from it · fork it · ship something better*
 
@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
-[![engine](https://img.shields.io/badge/engine-1309_LoC-blue)](article/00-index_EN.md)
+[![engine](https://img.shields.io/badge/engine-2190_LoC-blue)](article/00-index_EN.md)
 [![essays](https://img.shields.io/badge/source--reading-8_bilingual-orange)](article/00-index_EN.md)
 
 </div>
@@ -25,7 +25,7 @@
 
 | | CoreCoder | Claude Code | aider | nanoGPT |
 |---|---|---|---|---|
-| Lines of code | ~1,309 engine / 2,735 total | hundreds of thousands (closed) | tens of thousands of Python | ~600 (two files) |
+| Lines of code | ~1,794 engine / 3,754 total | hundreds of thousands (closed) | tens of thousands of Python | ~600 (two files) |
 | Time to read it all | one afternoon | can't (closed) | a few days of slogging | one afternoon |
 | Breakpoint, change, rerun? | yes, every line | no | yes, but there's a lot | yes |
 | What it's for | understand one, then fork your own | production coding assistant | terminal pair-programming | minimal GPT for teaching |
@@ -36,9 +36,9 @@ The nanoGPT column is there as a reference point: minimal, readable, but it teac
 
 I've always felt coding agents get talked about as if they were arcane. Strip a tool like Claude Code or Cursor all the way down and the core is a `while` loop wrapped around a large model, plus seven or eight tools that let it actually do things. The hard part was never the loop; it's everything the loop has to cope with once it meets the real world. CoreCoder is the minimal version that writes that core out honestly.
 
-The engine (loop, model interface, context, tools, sessions) is 1,309 lines once you drop blank lines and comments. Counting the outer CLI, config and packaging too, the whole package is 25 files: 2,735 physical lines, 2,205 net, every one short enough to read in a single sitting. The growth since the original 1,161-line snapshot went into visible features: plan mode, hooks and checkpoints, each documented below.
+The engine (loop, model interface, context, tools, sessions) is 2,190 lines once you drop blank lines and comments. Counting the outer CLI, config and packaging too, the whole package is 29 files: 4,712 physical lines, 4,000 net. The growth since the original 1,161-line snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation and usage accounting.
 
-And it really runs: reads and writes files, executes shell, spawns sub-agents, compacts context in three tiers, and tells you the tokens and dollars a run burned whenever you ask. Anything that would mutate your disk or run a command stops for your consent first. 214 tests, all green. But the point of it running isn't to become your daily driver. It runs so the walkthrough can't lie: a reference that shows how an agent works has to actually work.
+And it really runs: reads and writes files, executes shell, spawns sub-agents, budgets requests and archives context, and tells you the tokens and dollars a run burned whenever you ask. Anything that would mutate your disk or run a command stops for your consent first. 214 tests, all green. But the point of it running isn't to become your daily driver. It runs so the walkthrough can't lie: a reference that shows how an agent works has to actually work.
 
 The code came out of a public teardown: open analyses have already exposed a lot of the load-bearing architecture inside production agents like Claude Code. I took the most essential layer and rewrote it honestly, in as little code as I could. So reading CoreCoder is roughly like reading a runnable, annotated take on how that kind of agent works, except it's only a minimal reimplementation, sitting right there on your machine for you to take apart and change.
 
@@ -87,29 +87,33 @@ Laid out flat, the whole project is this big. Skim it before you clone and you'l
 
 ```
 corecoder/
-├── agent.py        agent loop + parallel tool exec       240 lines   ← start here
-├── llm.py          streaming client + retry + cost        332 lines
-├── context.py      three-tier context compaction          220 lines
-├── session.py      save / resume + path-traversal guard    97 lines
+├── agent.py        agent loop + parallel tool exec       389 lines   ← start here
+├── llm.py          streaming client + retry + cost        480 lines
+├── context.py      request budget + evidence compaction          534 lines
+├── session.py      validated atomic save / resume         148 lines
+├── state.py        session state + execution evidence       114 lines
 ├── permissions.py  consent for mutating tools              75 lines
-├── hooks.py        Pre/PostToolUse shell hooks             87 lines
+├── hooks.py        Pre/PostToolUse shell hooks             94 lines
 ├── shell.py        POSIX shell routing (Git Bash on Windows) 61 lines
-├── mcp.py          MCP stdio client for external tools    208 lines
+├── mcp.py          MCP stdio client + paged discovery     288 lines
 ├── prompt.py       system prompt                           41 lines
-├── cli.py          REPL + slash commands + one-shot       358 lines
+├── cli.py          REPL + slash commands + one-shot       513 lines
+├── results.py      structured run result + exit codes      36 lines
+├── usage.py        immutable request usage ledger         190 lines
+├── validation.py   config and session validators          158 lines
 ├── config.py       env-var config                          55 lines
-├── checkpoints.py  /undo snapshot and restore               93 lines
+├── checkpoints.py  /undo snapshot and restore               384 lines
 ├── demo.py         offline end-to-end demo                 101 lines
 └── tools/
-    ├── bash.py       shell + dangerous-command gate + cd  203 lines
-    ├── edit.py       unique-match search/replace + diff    99 lines
-    ├── grep.py       content search                        93 lines
-    ├── glob_tool.py  filename matching                     52 lines
-    ├── read.py       file read                             56 lines
-    ├── write.py      file write                            46 lines
-    ├── todo.py       agent-maintained task checklist       79 lines
-    ├── agent.py      sub-agent spawning                    72 lines
-    └── base.py       tool base class                       32 lines
+    ├── bash.py       shell + dangerous-command gate + cd  238 lines
+    ├── edit.py       unique-match search/replace + diff    132 lines
+    ├── grep.py       content search                        100 lines
+    ├── glob_tool.py  filename matching                     58 lines
+    ├── read.py       file read                             74 lines
+    ├── write.py      file write                            82 lines
+    ├── todo.py       agent-maintained task checklist       91 lines
+    ├── agent.py      sub-agent spawning                    98 lines
+    └── base.py       tool schema validation + outcomes     77 lines
 examples/
 └── plan_hooks_demo.py  offline plan mode + hooks demo (no API key)
 ```
@@ -141,7 +145,7 @@ Three decisions are worth a closer look, because they're the kind of call you ca
 
 **`edit_file` does search-and-replace on a unique match, not line numbers.** Line numbers are a trap: the model only has to miscount by one and it quietly edits the wrong place. Anchor on a unique snippet of the original instead. If there's no match, it hands the start of the file back so the model can re-anchor; if there are several matches, it makes the model bring more surrounding context rather than gamble on one. On a successful edit it returns a diff. Recoverable on failure, verifiable on success: the whole loop stays inside the tool.
 
-**Context isn't cut all at once when it's full; it gives ground in three tiers, cheapest first.** At half full (50%) it trims over-long tool outputs in place, a tier that's purely mechanical and costs no model call. If 70% still isn't enough, it has the model summarize the older turns into a single paragraph while keeping the most recent ones verbatim. Only at 90% does it hit the emergency tier and pull everything, summary and recent turns alike, down to its tightest form. Blunt truncation tends to throw away exactly the early decision a long task leans on most; tiering lets it surrender the least important things first instead of lopping off the oldest decisions wholesale from the start.
+**Every model request passes a context budget check.** The check includes the system prompt, tool schemas, history, a safety margin and the configured output limit. Large tool results and older history are archived before compression; previews retain paths and hashes for later retrieval. If the request still does not fit, or archiving fails, the agent stops with a clear error and preserves the original history. Evidence summaries retain tool parameters and actual execution outcomes.
 
 **You constrain a sub-agent by withholding the tool, not by writing rules and hoping it obeys.** A spawned sub-agent gets an isolated context and its own separate history, with a toolset exactly one item shorter than the parent's: the `agent` tool itself, so it can't recursively spawn more sub-agents. Handing it one fewer tool is cleaner than legislating a rule after the fact. It also reuses the parent's model connection (its spend folded into the same running total), truncates its output once it runs past 5,000 characters down to just the opening, and runs on a shorter round limit than the parent. The same restraint, end to end.
 
@@ -165,8 +169,8 @@ I also wrote a bilingual source-reading series, one intro plus eight parts, each
 
 Once you understand it, the natural next step is to fork. Getting started doesn't take much:
 
-- **Swap in a model you actually use.** It's the two env vars from above; `llm.py` (267 lines) is the entry point for all provider adaptation.
-- **Add a tool of your own.** Write a new file against the tool base class in `tools/base.py` (27 lines): run tests, fetch a page, call an LSP, whatever. The end of the second essay walks you through your first one by hand.
+- **Swap in a model you actually use.** It's the two env vars from above; `llm.py` (480 lines) is the entry point for all provider adaptation.
+- **Add a tool of your own.** Write a new file against the tool base class in `tools/base.py` (77 lines): run tests, fetch a page, call an LSP, whatever. The end of the second essay walks you through your first one by hand.
 - **Rewrite the system prompt.** `prompt.py` is all of 41 lines; change one line and you'll watch the agent's temperament shift. It's the cheapest "change one thing, see a result" in the whole project.
 - **Import it as a library.** The top level exports `Agent`, `LLM`, and `Config`, ready to embed in your own program:
 
@@ -201,7 +205,11 @@ Inside the REPL, `/help` lists everything; these are the ones you'll reach for:
 quit / exit      exit (Ctrl+C cancels the current round)
 ```
 
-Session IDs are sanitized to safe characters before they become filenames, every archive lands under `~/.corecoder/sessions`, and a malicious session name can't traverse out. Undo history persists the same way: checkpoints land in `~/.corecoder/checkpoints.json`, so `/undo` still reaches back after a restart.
+Session IDs are sanitized before they become filenames, and conversation saves live under `~/.corecoder/sessions`. Undo checkpoints are scoped by workspace and session under `~/.corecoder/checkpoints/` (or `CORECODER_DATA_DIR`). Save with `/save` and resume that ID from the same workspace to reopen its undo history. `/undo` protects files changed after the agent write; `/undo --force` displays the target and asks for confirmation before overwriting a content conflict. Symbolic links and non-file replacements remain protected.
+
+For scripts, run `corecoder --json --max-rounds 10 -p "inspect this project"`. Standard output contains one JSON object with the accumulated answer, tool errors, run usage, and completion status; tool and reasoning displays go to standard error. Exit codes are `0` for completion, `2` for the round limit, `130` for cancellation, and `1` for failure. Library callers can use `Agent.chat_result()` for the same structured result; `Agent.chat()` continues to return text and propagate exceptions.
+
+Usage is recorded per request attempt with a fixed model and rate snapshot. Switching models does not reprice history. `/tokens` reports known cost separately from requests with unknown rates or missing usage. Legacy aggregate counts resume with unknown prices.
 
 ## Permissions
 

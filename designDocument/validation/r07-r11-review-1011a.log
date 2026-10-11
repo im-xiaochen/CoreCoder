@@ -1,0 +1,35 @@
+......................................F................................. [ 64%]
+...........................F..........FF                                 [100%]
+================================== FAILURES ===================================
+_______ test_bad_hooks_structure_is_ignored_with_file_diagnostic[body5] _______
+designDocument\tests\test_r10_config_session_validation.py:20: in test_bad_hooks_structure_is_ignored_with_file_diagnostic
+    hooks = load_hooks(path)
+            ^^^^^^^^^^^^^^^^
+corecoder\hooks.py:66: in load_hooks
+    pre, post = validate_hooks(data, str(path.resolve()))
+    ^^^^^^^^^
+E   ValueError: not enough values to unpack (expected 2, got 1)
+------------------------------ Captured log call ------------------------------
+WARNING  corecoder.validation:validation.py:26 E:\github项目\CoreCoder\designDocument\validation\tmp-review-main-1011a\test_bad_hooks_structure_is_ig5\hooks.json: PreToolUse: expected array, got string
+______________ test_non_utf8_archive_is_rejected_with_diagnostic ______________
+designDocument\tests\test_acceptance_r07_r11_extended.py:298: in test_non_utf8_archive_is_rejected_with_diagnostic
+    assert str(path) in caplog.text
+E   AssertionError: assert 'E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-review-main-1011a\\test_non_utf8_archive_is_rejec0\\sessions\\encoding.json' in ''
+E    +  where 'E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-review-main-1011a\\test_non_utf8_archive_is_rejec0\\sessions\\encoding.json' = str(WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-review-main-1011a/test_non_utf8_archive_is_rejec0/sessions/encoding.json'))
+E    +  and   '' = <_pytest.logging.LogCaptureFixture object at 0x00000144E7C9FF80>.text
+___________ test_mcp_invalid_discovery_reaps_subprocess[bad-schema] ___________
+designDocument\tests\test_acceptance_r07_r11_extended.py:420: in test_mcp_invalid_discovery_reaps_subprocess
+    with pytest.raises(mcp.MCPError):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE MCPError
+_______ test_mcp_invalid_discovery_reaps_subprocess[non-object-schema] ________
+designDocument\tests\test_acceptance_r07_r11_extended.py:420: in test_mcp_invalid_discovery_reaps_subprocess
+    with pytest.raises(mcp.MCPError):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE MCPError
+=========================== short test summary info ===========================
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_hooks_structure_is_ignored_with_file_diagnostic[body5]
+FAILED designDocument\tests\test_acceptance_r07_r11_extended.py::test_non_utf8_archive_is_rejected_with_diagnostic
+FAILED designDocument\tests\test_acceptance_r07_r11_extended.py::test_mcp_invalid_discovery_reaps_subprocess[bad-schema]
+FAILED designDocument\tests\test_acceptance_r07_r11_extended.py::test_mcp_invalid_discovery_reaps_subprocess[non-object-schema]
+4 failed, 108 passed in 19.88s

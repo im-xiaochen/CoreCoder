@@ -69,8 +69,8 @@ def test_undo_recreates_a_deleted_parent_tree(tmp_path):
     assert not f.parent.exists()
 
     msg = checkpoints.undo()
-    assert msg == f"Restored {f} (recreated missing parent directories)."
-    assert f.read_text() == "v1\n"
+    assert "conflict" in msg.lower()
+    assert not f.exists()
 
 
 def test_undo_survives_a_restart(tmp_path):

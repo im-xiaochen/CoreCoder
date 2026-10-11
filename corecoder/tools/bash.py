@@ -14,6 +14,7 @@ import threading
 from typing import ClassVar
 
 from ..shell import run_shell
+from ..state import SessionState
 from .base import Tool
 
 # Track cwd across commands (Claude Code does this too). Thread-local, so that
@@ -74,6 +75,12 @@ class BashTool(Tool):
         "required": ["command"],
     }
 
+    def __init__(self, state: SessionState | None = None):
+        self.state = state or SessionState()
+
+    def clone_for_state(self, state: SessionState):
+        return type(self)(state=state)
+
     def execute(self, command: str, timeout: int = 120) -> str:
         # safety check
         warning = _check_dangerous(command)
@@ -81,7 +88,7 @@ class BashTool(Tool):
             return f"⚠ Blocked: {warning}\nCommand: {command}\nIf intentional, modify the command to be more specific."
 
         # use this thread's own tracked working directory
-        cwd = get_tracked_cwd() or os.getcwd()
+        cwd = str(self.state.cwd)
 
         try:
             proc = run_shell(
@@ -96,13 +103,18 @@ class BashTool(Tool):
             )
 
             # track cd commands so next command runs in the right place
-            if proc.returncode == 0:
-                _update_cwd(command, cwd)
+            trackable = _cwd_tracking_safe(command)
+            if proc.returncode == 0 and trackable:
+                tracked = _update_cwd(command, cwd)
+                if tracked is not None:
+                    self.state.cwd = self.state.resolve_path(tracked)
             out = proc.stdout
             if proc.stderr:
                 out += f"\n[stderr]\n{proc.stderr}"
             if proc.returncode != 0:
                 out += f"\n[exit code: {proc.returncode}]"
+            if proc.returncode == 0 and re.search(r"\bcd\b", command) and (not trackable or _update_cwd(command, cwd) is None):
+                out += "\n[cwd change untracked: complex shell construct; session cwd unchanged]"
             # keep head + tail to preserve the most useful info
             if len(out) > 15_000:
                 out = (
@@ -201,3 +213,26 @@ def _update_cwd(command: str, current_cwd: str):
                 changed = True
     if changed:
         _local.cwd = running
+        return running
+    return None
+
+
+def _cwd_tracking_safe(command: str) -> bool:
+    """Only infer cwd for a plainly ordered command chain.
+
+    Shell conditionals, pipelines, substitutions and variable expansion can
+    make a textual ``cd`` differ from the directory that actually ran.
+    """
+    if any(token in command for token in ("||", "|", "$(", "${", "`", "$", ">", "<", "&", "\n", "(", ")")):
+        return False
+    statements = _split_statements(command)
+    seen_non_cd = False
+    for words in statements:
+        if not words:
+            continue
+        if words[0] == "cd":
+            if seen_non_cd:
+                return False
+        else:
+            seen_non_cd = True
+    return True

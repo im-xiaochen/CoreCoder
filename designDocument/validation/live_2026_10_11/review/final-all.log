@@ -1,0 +1,10 @@
+........................................................................ [ 16%]
+........................................................................ [ 32%]
+........................................................................ [ 48%]
+...................................s.................................... [ 64%]
+........................................................................ [ 80%]
+........................................................................ [ 96%]
+..................                                                       [100%]
+=========================== short test summary info ===========================
+SKIPPED [1] designDocument\tests\test_acceptance_r01_r06_extended.py:310: Host does not permit creating test symlinks: [WinError 1314] 客户端没有所需的特权。: 'E:\\github项目\\CoreCoder\\designDocument\\validation\\live_2026_10_11\\review\\pytest-tmp-final-all\\test_reload_does_not_follow_a_0\\unrelated.txt' -> 'E:\\github项目\\CoreCoder\\designDocument\\validation\\live_2026_10_11\\review\\pytest-tmp-final-all\\test_reload_does_not_follow_a_0\\original.txt'
+449 passed, 1 skipped in 49.55s

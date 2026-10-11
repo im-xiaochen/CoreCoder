@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "corecoder"
 version = "0.7.0"
-description = "Minimal AI coding agent (2,735 lines of Python) inspired by Claude Code. Works with any LLM. (formerly NanoCoder)"
+description = "Minimal AI coding agent (4,712 lines of Python) inspired by Claude Code. Works with any LLM. (formerly NanoCoder)"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -32,6 +32,7 @@ dependencies = [
     "rich>=13.0",
     "prompt_toolkit>=3.0",
     "python-dotenv>=1.0",
+    "jsonschema>=4.23,<5",
 ]
 
 [tool.hatch.build.targets.wheel]

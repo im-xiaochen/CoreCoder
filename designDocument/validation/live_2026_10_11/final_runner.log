@@ -1,0 +1,13 @@
+Final frozen runner: PASS
+Command: E:\github项目\.corecoder-review-py312\Scripts\python.exe designDocument/validation/live_2026_10_11/live_acceptance.py
+Model: deepseek-flash
+Endpoint: https://api.deepseek.com
+Agent requests: 7; prompt_tokens=15563; completion_tokens=597; usage_known=true for all 7; tool_errors=[]; message_chain_valid=true
+Agent outcomes: agent/read_file/write_file/edit_file all succeeded; checkpoint external conflict asserted
+CLI completed requests: 1; prompt_tokens=1895; completion_tokens=28; status=completed; exit_code=0; JSON stdout one line
+CLI max_rounds requests: 1; prompt_tokens=1923; completion_tokens=50; status=max_rounds; exit_code=2; JSON stdout one line; tool_errors=[]; fixture_files=input.txt only
+Final runner requests: 9
+Cumulative recorded requests: 33 (including prior passing runs and one recorded semantic-summary failure before prompt fix)
+Pricing: unknown; usage retained, no provider price asserted
+Offline R10/R11: 39 passed (r10-r11-offline.xml)
+Validation: report and logs contain no API key; temporary runner workspace cleaned

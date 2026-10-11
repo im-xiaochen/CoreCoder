@@ -1,6 +1,6 @@
 """REPL slash commands: the dispatch loop itself, driven with scripted input."""
 
-from corecoder import Agent, checkpoints
+from corecoder import Agent
 from corecoder import session as session_module
 from corecoder.demo import ScriptedLLM
 from corecoder.llm import LLMResponse
@@ -99,7 +99,7 @@ def test_diff_lists_files_modified_this_session(monkeypatch, tmp_path, capsys):
     repl_with(monkeypatch, agent, ["/diff", "quit"])
     assert "No files modified" in capsys.readouterr().out
 
-    edit_module._changed_files.add(str(tmp_path / "a.py"))
+    agent.state.changed_files.add(str(tmp_path / "a.py"))
     repl_with(monkeypatch, agent, ["/diff", "quit"])
     out = capsys.readouterr().out
     assert "Files modified this session" in out
@@ -110,8 +110,8 @@ def test_undo_restores_then_reports_empty(monkeypatch, tmp_path, capsys):
     agent = _agent()
     f = tmp_path / "a.py"
     f.write_text("v1\n", encoding="utf-8")
-    checkpoints.record(f)
-    f.write_text("v2\n", encoding="utf-8")
+    from corecoder.tools.write import WriteFileTool
+    WriteFileTool(state=agent.state).execute(str(f), "v2\n")
 
     repl_with(monkeypatch, agent, ["/undo", "/undo", "quit"])
 

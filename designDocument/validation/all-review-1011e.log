@@ -1,0 +1,17 @@
+........................................................................ [ 16%]
+........................................................................ [ 32%]
+........................................................................ [ 48%]
+..............................s...................................F..... [ 65%]
+........................................................................ [ 81%]
+........................................................................ [ 97%]
+.........                                                                [100%]
+================================== FAILURES ===================================
+_____ test_reused_id_does_not_inherit_old_result_on_validation_interrupt ______
+designDocument\tests\test_acceptance_r07_r11_extended.py:127: in test_reused_id_does_not_inherit_old_result_on_validation_interrupt
+    assert len(replies) == 2 and "Wrote" in replies[0] and "cancelled" in replies[1]
+E   AssertionError: assert (2 == 2 and 'Wrote' in 'Wrote 1 lines to E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-all-review-1011e\\test_reused_id_does_not_inheri0\\same.txt' and 'cancelled' in 'Wrote 1 lines to E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-all-review-1011e\\test_reused_id_does_not_inheri0\\same.txt')
+E    +  where 2 = len(['Wrote 1 lines to E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-all-review-1011e\\test_reused_id_does_not_... E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-all-review-1011e\\test_reused_id_does_not_inheri0\\same.txt'])
+=========================== short test summary info ===========================
+SKIPPED [1] designDocument\tests\test_acceptance_r01_r06_extended.py:310: Host does not permit creating test symlinks: [WinError 1314] 客户端没有所需的特权。: 'E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-all-review-1011e\\test_reload_does_not_follow_a_0\\unrelated.txt' -> 'E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-all-review-1011e\\test_reload_does_not_follow_a_0\\original.txt'
+FAILED designDocument\tests\test_acceptance_r07_r11_extended.py::test_reused_id_does_not_inherit_old_result_on_validation_interrupt
+1 failed, 439 passed, 1 skipped, 1 deselected in 49.11s
