@@ -7,10 +7,14 @@ and makes edits safe and reviewable.
 """
 
 import difflib
-from pathlib import Path
+import os
+import uuid
 from typing import ClassVar
 
-from ..checkpoints import record as _record_checkpoint
+from ..checkpoints import abort as _abort_checkpoint
+from ..checkpoints import begin as _begin_checkpoint
+from ..checkpoints import finalize as _finalize_checkpoint
+from ..state import SessionState
 from .base import Tool
 
 # track files changed this session for /diff
@@ -43,12 +47,20 @@ class EditFileTool(Tool):
         "required": ["file_path", "old_string", "new_string"],
     }
 
+    def __init__(self, state: SessionState | None = None):
+        self.state = state or SessionState()
+        if state is None:
+            self.state.checkpoint_store = None
+
+    def clone_for_state(self, state: SessionState):
+        return type(self)(state=state)
+
     def execute(self, file_path: str, old_string: str, new_string: str) -> str:
         from .base import FILE_MUTATION_LOCK
 
         try:
             with FILE_MUTATION_LOCK:
-                p = Path(file_path).expanduser().resolve()
+                p = self.state.resolve_path(file_path)
                 if not p.exists():
                     return f"Error: {file_path} not found"
 
@@ -71,13 +83,34 @@ class EditFileTool(Tool):
                     )
 
                 new_content = content.replace(old_string, new_string, 1)
-                _record_checkpoint(p)
-                p.write_text(new_content, encoding="utf-8")
+                store = self.state.checkpoint_store
+                token = (store.begin(p) if store is not None else _begin_checkpoint(p))
+                wrote = False
+                try:
+                    tmp = p.with_name(p.name + f".{uuid.uuid4().hex}.tmp")
+                    try:
+                        with tmp.open("w", encoding="utf-8", newline="") as fh:
+                            fh.write(new_content)
+                            fh.flush()
+                            os.fsync(fh.fileno())
+                        tmp.replace(p)
+                    finally:
+                        try: tmp.unlink(missing_ok=True)
+                        except OSError: pass
+                    wrote = True
+                    if store is not None: store.finalize(token, p)
+                    else: _finalize_checkpoint(token, p)
+                except Exception:
+                    if not wrote:
+                        try: (store.abort(token) if store is not None else _abort_checkpoint(token))
+                        except Exception: pass  # noqa: BLE001, S110
+                    raise
+                self.state.changed_files.add(str(p))
                 _changed_files.add(str(p))
 
             # generate a unified diff so the user/LLM can see exactly what changed
             diff = _unified_diff(content, new_content, str(p))
-            return f"Edited {file_path}\n{diff}"
+            return f"Edited {p}\n{diff}"
         except Exception as e:  # noqa: BLE001
             # boundary: the agent gets an error string, not a traceback
             return f"Error: {e}"

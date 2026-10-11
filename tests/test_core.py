@@ -3,6 +3,7 @@
 import re
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 from unittest import mock
 
@@ -71,6 +72,7 @@ def test_config_from_env(monkeypatch):
 
 def test_config_defaults(monkeypatch):
     # clear relevant env vars without leaking the change into other tests
+    monkeypatch.setattr("corecoder.config._load_dotenv", lambda: None)
     monkeypatch.delenv("CORECODER_MODEL", raising=False)
     monkeypatch.delenv("CORECODER_MAX_TOKENS", raising=False)
 
@@ -117,7 +119,8 @@ def test_context_snip():
     assert after < before
 
 
-def test_context_compress():
+def test_context_compress(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     ctx = ContextManager(max_tokens=2000)
     msgs = []
     for i in range(20):
@@ -144,7 +147,8 @@ def test_safe_split_never_orphans_a_tool_message():
     assert messages[split].get("role") != "tool"
 
 
-def test_compress_never_leaves_an_orphan_tool_reply():
+def test_compress_never_leaves_an_orphan_tool_reply(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     """After summarisation every tool reply must still follow its tool_calls."""
     ctx = ContextManager(max_tokens=2000)
     msgs = []
@@ -194,20 +198,16 @@ def test_list_sessions():
 
 def test_cost_estimation_known_model():
     from corecoder.llm import LLM
-    llm = LLM.__new__(LLM)
-    llm.model = "gpt-5.4"
-    llm.total_prompt_tokens = 1_000_000
-    llm.total_completion_tokens = 500_000
+    llm = LLM(model="gpt-5.4", api_key="offline")
+    llm._drain(iter([SimpleNamespace(usage=SimpleNamespace(prompt_tokens=1_000_000, completion_tokens=500_000), choices=[])]), None, None)
     cost = llm.estimated_cost
     assert cost is not None
     assert cost == 2.5 + 7.5  # $2.5/M in + $15/M out * 0.5M
 
 def test_cost_estimation_kimi_k3():
     from corecoder.llm import LLM
-    llm = LLM.__new__(LLM)
-    llm.model = "kimi-k3"
-    llm.total_prompt_tokens = 1_000_000
-    llm.total_completion_tokens = 500_000
+    llm = LLM(model="kimi-k3", api_key="offline")
+    llm._drain(iter([SimpleNamespace(usage=SimpleNamespace(prompt_tokens=1_000_000, completion_tokens=500_000), choices=[])]), None, None)
     cost = llm.estimated_cost
     assert cost is not None
     assert cost == 3.0 + 7.5  # $3/M in + $15/M out * 0.5M
@@ -215,10 +215,8 @@ def test_cost_estimation_kimi_k3():
 
 def test_cost_estimation_unknown_model():
     from corecoder.llm import LLM
-    llm = LLM.__new__(LLM)
-    llm.model = "some-custom-model"
-    llm.total_prompt_tokens = 1000
-    llm.total_completion_tokens = 500
+    llm = LLM(model="some-custom-model", api_key="offline")
+    llm._drain(iter([SimpleNamespace(usage=SimpleNamespace(prompt_tokens=1000, completion_tokens=500), choices=[])]), None, None)
     assert llm.estimated_cost is None
 
 
@@ -250,7 +248,8 @@ def test_write_tracks_changed_files(tmp_path):
 def test_parallel_bash_calls_inherit_and_merge_session_cwd(tmp_path):
     """Pool workers must start from the session cwd, not the launch dir, and a
     cd inside the batch moves the session cwd afterwards."""
-    from corecoder.tools.bash import get_tracked_cwd, set_tracked_cwd
+    from corecoder.state import SessionState
+    from corecoder.tools.bash import BashTool
 
     def norm_dir(s: str) -> str:
         # pwd prints the shell's own form: git-bash gives /c/Users/... where
@@ -263,8 +262,8 @@ def test_parallel_bash_calls_inherit_and_merge_session_cwd(tmp_path):
             s = norm_dir(tempfile.gettempdir()) + s[4:]
         return s
 
-    bash = get_tool("bash")
-    agent = Agent(llm=LLM.__new__(LLM), tools=[bash])
+    state = SessionState(tmp_path)
+    agent = Agent(llm=LLM.__new__(LLM), state=state, tools=[BashTool(state=state)])
     target = tmp_path / "proj"
     target.mkdir()
     (tmp_path / "marker.txt").write_text("x")
@@ -273,20 +272,14 @@ def test_parallel_bash_calls_inherit_and_merge_session_cwd(tmp_path):
         def __init__(self, i, cmd):
             self.name, self.id, self.arguments = "bash", str(i), {"command": cmd}
 
-    prev = get_tracked_cwd()
-    set_tracked_cwd(str(tmp_path))
-    try:
-        results = agent._exec_tools_parallel([_TC(1, "pwd"), _TC(2, "ls marker.txt")])
-        assert norm_dir(str(tmp_path)) in norm_dir(results[0])
-        assert "marker.txt" in results[1]
+    results = agent._exec_tools_parallel([_TC(1, "pwd"), _TC(2, "ls marker.txt")])
+    assert norm_dir(str(tmp_path)) in norm_dir(results[0])
+    assert "marker.txt" in results[1]
 
-        # a cd in the batch lands on the session afterwards; siblings in the
-        # same batch still start from the pre-batch cwd (parallel, not serial)
-        results = agent._exec_tools_parallel([_TC(3, f"cd {target}"), _TC(4, "pwd")])
-        assert get_tracked_cwd() == str(target)
-        assert norm_dir(str(tmp_path)) in norm_dir(results[1])
-    finally:
-        set_tracked_cwd(prev)
+    # A mutating batch is serialized, so the second command observes the cd.
+    results = agent._exec_tools_parallel([_TC(3, f"cd {target}"), _TC(4, "pwd")])
+    assert state.cwd == target
+    assert norm_dir(str(target)) in norm_dir(results[1])
 
 
 def test_parallel_edits_to_one_file_both_land(tmp_path):
@@ -338,16 +331,17 @@ def test_reset_clears_todo_list():
 
     todo = TodoWriteTool()
     agent = Agent(llm=LLM.__new__(LLM), tools=[todo])
-    todo.execute(tasks=[{"content": "fix parser bug", "status": "in_progress"}])
+    agent._todo.execute(tasks=[{"content": "fix parser bug", "status": "in_progress"}])
     assert "fix parser bug" in agent._full_messages()[0]["content"]
     agent.reset()
-    assert todo._tasks == []
+    assert agent._todo._tasks == []
     assert "# Current task list" not in agent._full_messages()[0]["content"]
 
 
 def test_agent_tool_scope_is_per_instance():
     """An Agent restricted to a subset of tools must not resolve tools outside it."""
-    only_read = [get_tool("read_file")]
+    from corecoder.tools.read import ReadFileTool
+    only_read = [ReadFileTool()]
     agent = Agent(llm=LLM.__new__(LLM), tools=only_read)
     assert set(agent._tool_by_name) == {"read_file"}
 
@@ -395,12 +389,15 @@ def test_interrupt_backfills_missing_tool_replies():
     class _TC:
         def __init__(self, i):
             self.id = i
+            self.name = "read_file"
+            self.arguments = {"file_path": "pending.txt"}
 
     agent._answer_pending_tool_calls([_TC("a"), _TC("b")])
     replies = [m for m in agent.messages if m.get("role") == "tool"]
     ids = [m["tool_call_id"] for m in replies]
     assert sorted(ids) == ["a", "b"]
     assert ids.count("a") == 1  # the already-answered call wasn't duplicated
+    assert [r["status"] for r in agent.state.execution_records] == ["cancelled"]
 
 
 # --- Task list injection ---
@@ -411,7 +408,7 @@ def test_todo_list_is_injected_into_system_context():
     todo = TodoWriteTool()
     agent = Agent(llm=LLM.__new__(LLM), tools=[todo])
 
-    todo.execute(tasks=[
+    agent._todo.execute(tasks=[
         {"content": "fix the bug", "status": "in_progress"},
         {"content": "add a test", "status": "pending"},
     ])
@@ -427,18 +424,19 @@ def test_todo_injection_tracks_updates():
     todo = TodoWriteTool()
     agent = Agent(llm=LLM.__new__(LLM), tools=[todo])
 
-    todo.execute(tasks=[{"content": "only task", "status": "in_progress"}])
-    todo.execute(tasks=[{"content": "only task", "status": "done"}])
+    agent._todo.execute(tasks=[{"content": "only task", "status": "in_progress"}])
+    agent._todo.execute(tasks=[{"content": "only task", "status": "done"}])
     system = agent._full_messages()[0]["content"]
     assert "[done] only task" in system
     assert "[in_progress] only task" not in system
 
-    todo.execute(tasks=[])
+    agent._todo.execute(tasks=[])
     assert "# Current task list" not in agent._full_messages()[0]["content"]
 
 
 def test_agent_without_todo_tool_injects_nothing():
-    agent = Agent(llm=LLM.__new__(LLM), tools=[get_tool("read_file")])
+    from corecoder.tools.read import ReadFileTool
+    agent = Agent(llm=LLM.__new__(LLM), tools=[ReadFileTool()])
     assert "# Current task list" not in agent._full_messages()[0]["content"]
 
 

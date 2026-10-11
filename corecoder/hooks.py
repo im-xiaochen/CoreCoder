@@ -17,6 +17,7 @@ import subprocess
 from pathlib import Path
 
 from .shell import run_shell
+from .validation import validate_hooks
 
 log = logging.getLogger(__name__)
 
@@ -34,22 +35,22 @@ class Hooks:
     def __bool__(self):
         return bool(self.pre or self.post)
 
-    def run_pre(self, tool_name: str, tool_input: dict) -> str | None:
+    def run_pre(self, tool_name: str, tool_input: dict, cwd: str | None = None) -> str | None:
         """Fire matching PreToolUse hooks. A string return blocks the call and
         is what the model gets as the tool result; None means carry on."""
         payload = {"tool_name": tool_name, "tool_input": tool_input}
         for hook in self.pre:
-            out = _fire(hook, payload)
+            out = _fire(hook, payload, cwd=cwd)
             if out is not None and out.returncode == 2:
                 reason = out.stderr.strip() or "no reason given"
                 return "Blocked by hook: " + reason
         return None
 
-    def run_post(self, tool_name: str, tool_input: dict, result: str):
+    def run_post(self, tool_name: str, tool_input: dict, result: str, cwd: str | None = None):
         """PostToolUse hooks observe a finished call; they can never block."""
         payload = {"tool_name": tool_name, "tool_input": tool_input, "tool_response": result}
         for hook in self.post:
-            _fire(hook, payload)
+            _fire(hook, payload, cwd=cwd)
 
 
 def load_hooks(path: Path = HOOKS_FILE) -> Hooks:
@@ -59,15 +60,14 @@ def load_hooks(path: Path = HOOKS_FILE) -> Hooks:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return Hooks([], [])
-    except (json.JSONDecodeError, OSError) as e:
-        log.warning("ignoring %s: %s", path, e)
+    except (json.JSONDecodeError, OSError, UnicodeError):
+        log.warning("ignoring %s: invalid JSON or unreadable file", path)
         return Hooks([], [])
-    pre = [h for h in data.get("PreToolUse", []) if h.get("command")]
-    post = [h for h in data.get("PostToolUse", []) if h.get("command")]
+    pre, post = validate_hooks(data, str(path.resolve()))
     return Hooks(pre, post)
 
 
-def _fire(hook: dict, payload: dict):
+def _fire(hook: dict, payload: dict, cwd: str | None = None):
     """Run one hook if its matcher applies (exact tool name or "*"), payload
     as JSON on stdin. None means it didn't match or failed and was skipped."""
     matcher = hook.get("matcher", "")
@@ -75,13 +75,20 @@ def _fire(hook: dict, payload: dict):
         return None
     try:
         proc = run_shell(
-            hook["command"], check=False, input=json.dumps(payload),
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT,
+            hook["command"],
+            check=False,
+            input=json.dumps(payload),
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=TIMEOUT,
         )
     except (subprocess.TimeoutExpired, OSError) as e:
-        log.warning("hook skipped (%s): %s", e.__class__.__name__, hook["command"])
+        log.warning("hook skipped (%s)", e.__class__.__name__)
         return None
     if proc.returncode not in (0, 2):
-        log.warning("hook exited %d, skipped: %s", proc.returncode, hook["command"])
+        log.warning("hook exited %d, skipped", proc.returncode)
         return None
     return proc

@@ -1,7 +1,7 @@
 """Slash-command dispatch in the REPL: each command must act and stay silent-proof."""
 
 import corecoder.session as session_module
-from corecoder import Agent, checkpoints
+from corecoder import Agent
 from corecoder.demo import ScriptedLLM
 from corecoder.llm import LLMResponse
 from tests.conftest import repl_with
@@ -57,16 +57,22 @@ def test_compact_on_a_short_conversation_reports_nothing(monkeypatch, capsys):
 
 
 def test_save_then_sessions_lists_it(monkeypatch, capsys, tmp_path):
+    import json
+
     monkeypatch.setattr(session_module, "SESSIONS_DIR", tmp_path)
     agent = _agent(LLMResponse(content="answer"))
     agent.chat("remember this")
 
-    repl_with(monkeypatch, agent, ["/save", "/sessions", "quit"])
+    config = repl_with(monkeypatch, agent, ["/save", "/sessions", "quit"])
 
     out = capsys.readouterr().out
-    assert "Session saved: session_" in out
+    assert f"Session saved: {agent.state.session_id}" in out
     saved = list(tmp_path.glob("*.json"))
     assert len(saved) == 1
+    data = json.loads(saved[0].read_text(encoding="utf-8"))
+    assert data["id"] == agent.state.session_id
+    assert data["model"] == config.model
+    assert data["messages"] == agent.messages
     assert saved[0].stem in out  # /sessions printed the same id
     assert "remember this" in out  # and its first-user-message preview
 
@@ -90,8 +96,8 @@ def test_diff_with_no_edits_reports_none(monkeypatch, capsys):
 
 
 def test_diff_lists_modified_files(monkeypatch, capsys):
-    monkeypatch.setattr("corecoder.tools.edit._changed_files", {"src/a.py"})
     agent = _agent()
+    agent.state.changed_files.add("src/a.py")
 
     repl_with(monkeypatch, agent, ["/diff", "quit"])
 
@@ -111,9 +117,9 @@ def test_undo_with_empty_stack_reports_nothing(monkeypatch, capsys):
 def test_undo_restores_the_recorded_file(monkeypatch, capsys, tmp_path):
     target = tmp_path / "note.txt"
     target.write_text("before", encoding="utf-8")
-    checkpoints.record(target)
-    target.write_text("after", encoding="utf-8")
     agent = _agent()
+    from corecoder.tools.write import WriteFileTool
+    WriteFileTool(state=agent.state).execute(str(target), "after")
 
     repl_with(monkeypatch, agent, ["/undo", "quit"])
 

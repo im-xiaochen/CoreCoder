@@ -10,6 +10,7 @@ The sub-agent runs to completion and returns a text summary.
 
 from typing import ClassVar
 
+from ..state import SessionState
 from .base import Tool
 
 
@@ -32,8 +33,16 @@ class AgentTool(Tool):
         "required": ["task"],
     }
 
-    # set by Agent.__init__ after construction
-    _parent_agent = None
+    def __init__(self):
+        self._parent_agent = None
+
+    def bind_parent(self, parent):
+        if self._parent_agent is not None and self._parent_agent is not parent:
+            raise ValueError("agent tool is already bound to another parent Agent")
+        self._parent_agent = parent
+
+    def clone_for_state(self, state: SessionState):
+        return type(self)()
 
     def execute(self, task: str) -> str:
         if self._parent_agent is None:
@@ -41,11 +50,30 @@ class AgentTool(Tool):
 
         # import here to avoid circular dep
         from ..agent import Agent
-
         parent = self._parent_agent
+        child_state = parent.state.fork()
+        child_tools = []
+        for tool in parent.tools:
+            if tool.name == "agent":
+                continue
+            # Clone the actual exposed instance.  Looking up a replacement by
+            # name would let a restricted wrapper be replaced by an unrestricted
+            # built-in in the child.
+            clone = getattr(tool, "clone_for_state", None)
+            if clone is not None:
+                child_tools.append(clone(child_state))
+            elif getattr(tool, "stateless", False):
+                child_tools.append(tool)
+            elif getattr(tool, "state", None) is not None:
+                clone = getattr(tool, "clone_for_state", None)
+                if clone is None:
+                    return f"Sub-agent error: stateful tool {tool.name!r} cannot be cloned"
+            else:
+                return f"Sub-agent error: custom tool {tool.name!r} must declare stateless=True or implement clone_for_state(state)"
         sub = Agent(
             llm=parent.llm,
-            tools=[t for t in parent.tools if t.name != "agent"],  # no recursive agents
+            state=child_state,
+            tools=child_tools,
             max_context_tokens=parent.context.max_tokens,
             max_rounds=20,
             # the sub-agent answers to the same consent layer and hooks as the parent
@@ -53,12 +81,10 @@ class AgentTool(Tool):
             hooks=parent.hooks,
         )
 
-        # a sub-agent failure comes back as text, never propagates into the parent
-        # sub-agents share this thread's tracked cwd; restore it on return so a
-        # sub-agent's own cd never leaks into the parent's shell state
+        # Keep the legacy thread-local adapter stable for embedders that still
+        # inspect it; actual path decisions use SessionState above.
         from .bash import get_tracked_cwd, set_tracked_cwd
-
-        parent_cwd = get_tracked_cwd()
+        parent_tracked_cwd = get_tracked_cwd()
         try:
             result = sub.chat(task)
             # trim long results to avoid blowing up parent's context
@@ -68,5 +94,5 @@ class AgentTool(Tool):
         except Exception as e:  # noqa: BLE001
             return f"Sub-agent error: {e}"
         finally:
-            if get_tracked_cwd() != parent_cwd:
-                set_tracked_cwd(parent_cwd)
+            if get_tracked_cwd() != parent_tracked_cwd:
+                set_tracked_cwd(parent_tracked_cwd)
