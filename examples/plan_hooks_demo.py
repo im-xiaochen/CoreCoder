@@ -61,13 +61,13 @@ class DemoHooks:
     def __init__(self):
         self._inner = Hooks(pre=[], post=[])
 
-    def run_pre(self, tool_name: str, tool_input: dict) -> str | None:
+    def run_pre(self, tool_name: str, tool_input: dict, cwd: str | None = None) -> str | None:
         console.print(f"[magenta]hook PreToolUse[/]  {tool_name} -> allow")
-        return self._inner.run_pre(tool_name, tool_input)
+        return self._inner.run_pre(tool_name, tool_input, cwd=cwd)
 
-    def run_post(self, tool_name: str, tool_input: dict, result: str):
+    def run_post(self, tool_name: str, tool_input: dict, result: str, cwd: str | None = None):
         console.print(f"[magenta]hook PostToolUse[/] {tool_name} done")
-        return self._inner.run_post(tool_name, tool_input, result)
+        return self._inner.run_post(tool_name, tool_input, result, cwd=cwd)
 
 
 def _script(workdir: Path) -> list[LLMResponse]:

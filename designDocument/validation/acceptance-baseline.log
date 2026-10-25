@@ -1,0 +1,864 @@
+FFFFFFFFF.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF.FFFFFFFFFFFFFFFFFFFFFFFFFFF [ 69%]
+FFFFFFFFFFFFFFFFFFF.FFF..FFFFFFF                                         [100%]
+================================== FAILURES ===================================
+_________________ test_default_tools_and_parent_are_distinct __________________
+designDocument\tests\test_r01_agent_state_isolation.py:13: in test_default_tools_and_parent_are_distinct
+    assert all(a._tool_by_name[name] is not b._tool_by_name[name] for name in a._tool_by_name)
+E   assert False
+E    +  where False = all(<generator object test_default_tools_and_parent_are_distinct.<locals>.<genexpr> at 0x000001B81C9ADB60>)
+___________________ test_todo_and_reset_do_not_cross_agents ___________________
+designDocument\tests\test_r01_agent_state_isolation.py:23: in test_todo_and_reset_do_not_cross_agents
+    assert "A_PRIVATE" in a._full_messages()[0]["content"]
+E   assert 'A_PRIVATE' in "You are CoreCoder, an AI coding assistant running in the user's terminal.\nYou help with software engineering: writin...the request is ambiguous, ask for clarification rather than guessing.\n\n\n# Current task list\n1. [pending] B_PRIVATE"
+________________ test_child_uses_own_parents_model_and_denial _________________
+designDocument\tests\test_r01_agent_state_isolation.py:51: in test_child_uses_own_parents_model_and_denial
+    assert not target.exists()
+E   AssertionError: assert not True
+E    +  where True = exists()
+E    +    where exists = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-validated/test_child_uses_own_parents_mo0/must-not-exist.txt').exists
+________________ test_child_todo_does_not_replace_parent_todo _________________
+designDocument\tests\test_r01_agent_state_isolation.py:64: in test_child_todo_does_not_replace_parent_todo
+    assert "PARENT_ONLY" in a._todo.render()
+E   AssertionError: assert 'PARENT_ONLY' in '1. [done] CHILD_ONLY'
+E    +  where '1. [done] CHILD_ONLY' = render()
+E    +    where render = <corecoder.tools.todo.TodoWriteTool object at 0x000001B81B6D6120>.render
+E    +      where <corecoder.tools.todo.TodoWriteTool object at 0x000001B81B6D6120> = <corecoder.agent.Agent object at 0x000001B81CA7C470>._todo
+_________________ test_cd_then_all_file_tools_share_cwd[sub] __________________
+designDocument\tests\conftest.py:54: in create
+    module = importlib.import_module("corecoder.state")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\lenovo\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'corecoder.state'
+
+During handling of the above exception, another exception occurred:
+designDocument\tests\test_r02_workspace_paths.py:19: in test_cd_then_all_file_tools_share_cwd
+    a = Agent(ScriptedLLM([]), state=state_factory())
+                                     ^^^^^^^^^^^^^^^
+designDocument\tests\conftest.py:58: in create
+    pytest.fail("R01/R02 proposed contract is not implemented: corecoder.state.SessionState")
+E   Failed: R01/R02 proposed contract is not implemented: corecoder.state.SessionState
+_ test_cd_then_all_file_tools_share_cwd[\u542b\u7a7a\u683c \u5b50\u76ee\u5f55] _
+designDocument\tests\conftest.py:54: in create
+    module = importlib.import_module("corecoder.state")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\lenovo\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'corecoder.state'
+
+During handling of the above exception, another exception occurred:
+designDocument\tests\test_r02_workspace_paths.py:19: in test_cd_then_all_file_tools_share_cwd
+    a = Agent(ScriptedLLM([]), state=state_factory())
+                                     ^^^^^^^^^^^^^^^
+designDocument\tests\conftest.py:58: in create
+    pytest.fail("R01/R02 proposed contract is not implemented: corecoder.state.SessionState")
+E   Failed: R01/R02 proposed contract is not implemented: corecoder.state.SessionState
+__________________ test_same_batch_cd_then_write_is_ordered ___________________
+designDocument\tests\conftest.py:54: in create
+    module = importlib.import_module("corecoder.state")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\lenovo\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'corecoder.state'
+
+During handling of the above exception, another exception occurred:
+designDocument\tests\test_r02_workspace_paths.py:42: in test_same_batch_cd_then_write_is_ordered
+    ]), state=state_factory())
+              ^^^^^^^^^^^^^^^
+designDocument\tests\conftest.py:58: in create
+    pytest.fail("R01/R02 proposed contract is not implemented: corecoder.state.SessionState")
+E   Failed: R01/R02 proposed contract is not implemented: corecoder.state.SessionState
+_____________ test_child_starts_here_and_cannot_change_parent_cwd _____________
+designDocument\tests\conftest.py:54: in create
+    module = importlib.import_module("corecoder.state")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\lenovo\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'corecoder.state'
+
+During handling of the above exception, another exception occurred:
+designDocument\tests\test_r02_workspace_paths.py:58: in test_child_starts_here_and_cannot_change_parent_cwd
+    ]), state=state_factory(work))
+              ^^^^^^^^^^^^^^^^^^^
+designDocument\tests\conftest.py:58: in create
+    pytest.fail("R01/R02 proposed contract is not implemented: corecoder.state.SessionState")
+E   Failed: R01/R02 proposed contract is not implemented: corecoder.state.SessionState
+______________________ test_failed_cd_and_absolute_paths ______________________
+designDocument\tests\conftest.py:54: in create
+    module = importlib.import_module("corecoder.state")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\lenovo\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'corecoder.state'
+
+During handling of the above exception, another exception occurred:
+designDocument\tests\test_r02_workspace_paths.py:65: in test_failed_cd_and_absolute_paths
+    a = Agent(ScriptedLLM([]), state=state_factory())
+                                     ^^^^^^^^^^^^^^^
+designDocument\tests\conftest.py:58: in create
+    pytest.fail("R01/R02 proposed contract is not implemented: corecoder.state.SessionState")
+E   Failed: R01/R02 proposed contract is not implemented: corecoder.state.SessionState
+___________ test_external_edit_preserves_file_and_checkpoint[True] ____________
+designDocument\tests\test_r03_undo_conflicts.py:26: in test_external_edit_preserves_file_and_checkpoint
+    assert target.read_text(encoding="utf-8") == "human"
+E   AssertionError: assert 'original' == 'human'
+E     
+E     - human
+E     + original
+___________ test_external_edit_preserves_file_and_checkpoint[False] ___________
+designDocument\tests\test_r03_undo_conflicts.py:26: in test_external_edit_preserves_file_and_checkpoint
+    assert target.read_text(encoding="utf-8") == "human"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\lenovo\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\lenovo\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\pathlib.py:1013: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: 'E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-validated\\test_external_edit_preserves_f1\\file.txt'
+_____________________ test_external_delete_is_a_conflict ______________________
+designDocument\tests\test_r03_undo_conflicts.py:38: in test_external_delete_is_a_conflict
+    assert not target.exists()
+E   AssertionError: assert not True
+E    +  where True = exists()
+E    +    where exists = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-validated/test_external_delete_is_a_conf0/file.txt').exists
+_________________________ test_force_undo_is_explicit _________________________
+designDocument\tests\test_r03_undo_conflicts.py:48: in test_force_undo_is_explicit
+    checkpoints.undo(force=True)
+E   TypeError: undo() got an unexpected keyword argument 'force'
+_____________________ test_conflict_guard_survives_reload _____________________
+designDocument\tests\test_r03_undo_conflicts.py:61: in test_conflict_guard_survives_reload
+    assert target.read_text(encoding="utf-8") == "human"
+E   AssertionError: assert 'original' == 'human'
+E     
+E     - human
+E     + original
+___________ test_restore_write_failure_keeps_entry_and_allows_retry ___________
+designDocument\tests\test_r04_undo_transaction.py:27: in test_restore_write_failure_keeps_entry_and_allows_retry
+    result = checkpoints.undo()
+             ^^^^^^^^^^^^^^^^^^
+corecoder\checkpoints.py:73: in undo
+    p.write_bytes(prior)
+designDocument\tests\test_r04_undo_transaction.py:24: in fail
+    raise OSError("simulated disk failure")
+E   OSError: simulated disk failure
+________________ test_created_file_delete_failure_keeps_entry _________________
+designDocument\tests\test_r04_undo_transaction.py:48: in test_created_file_delete_failure_keeps_entry
+    result = checkpoints.undo()
+             ^^^^^^^^^^^^^^^^^^
+corecoder\checkpoints.py:66: in undo
+    p.unlink(missing_ok=True)
+designDocument\tests\test_r04_undo_transaction.py:43: in deny_target
+    raise PermissionError("simulated locked file")
+E   PermissionError: simulated locked file
+______ test_checkpoint_commit_failure_compensates_and_remains_retryable _______
+designDocument\tests\test_r04_undo_transaction.py:68: in test_checkpoint_commit_failure_compensates_and_remains_retryable
+    assert "error" in result.lower()
+E   AssertionError: assert 'error' in 'restored e:\\github项目\\corecoder\\designdocument\\validation\\tmp-validated\\test_checkpoint_commit_failure0\\file.txt.'
+E    +  where 'restored e:\\github项目\\corecoder\\designdocument\\validation\\tmp-validated\\test_checkpoint_commit_failure0\\file.txt.' = <built-in method lower of str object at 0x000001B81CA3C930>()
+E    +    where <built-in method lower of str object at 0x000001B81CA3C930> = 'Restored E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-validated\\test_checkpoint_commit_failure0\\file.txt.'.lower
+_____________________ test_undo_failure_does_not_end_repl _____________________
+designDocument\tests\test_r04_undo_transaction.py:86: in test_undo_failure_does_not_end_repl
+    consumed = drive_repl(monkeypatch, a, ["/undo", "/help", "quit"])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:50: in drive_repl
+    cli._repl(agent, Config(model="offline"))
+corecoder\cli.py:282: in _repl
+    console.print(undo())
+                  ^^^^^^
+designDocument\tests\test_r04_undo_transaction.py:82: in fail
+    raise OSError("simulated restore failure")
+E   OSError: simulated restore failure
+---------------------------- Captured stdout call -----------------------------
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CoreCoder v0.7.0                                                            │
+│ Model: offline                                                              │
+│ Permissions: ask before mutating tools                                      │
+│ Type /help for commands, Ctrl+C to cancel, quit to exit.                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+__________ test_single_line_output_is_archived_and_fits[single-line] __________
+designDocument\tests\test_r05_context_budget.py:29: in test_single_line_output_is_archived_and_fits
+    result = prepare(ContextManager(max_tokens=2048), messages, tmp_path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\test_r05_context_budget.py:16: in prepare
+    prepare_request = required_attr(manager, "prepare_request")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.context.ContextManager object at 0x000001B81CB47680>.prepare_request
+______________ test_single_line_output_is_archived_and_fits[cjk] ______________
+designDocument\tests\test_r05_context_budget.py:29: in test_single_line_output_is_archived_and_fits
+    result = prepare(ContextManager(max_tokens=2048), messages, tmp_path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\test_r05_context_budget.py:16: in prepare
+    prepare_request = required_attr(manager, "prepare_request")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.context.ContextManager object at 0x000001B81CB47AA0>.prepare_request
+____________ test_oversized_last_group_keeps_every_reply_and_fits _____________
+designDocument\tests\test_r05_context_budget.py:44: in test_oversized_last_group_keeps_every_reply_and_fits
+    result = prepare(ContextManager(max_tokens=4096), messages, tmp_path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\test_r05_context_budget.py:16: in prepare
+    prepare_request = required_attr(manager, "prepare_request")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.context.ContextManager object at 0x000001B81CB87560>.prepare_request
+_____ test_fixed_request_cost_can_refuse_without_mutating_history[system] _____
+designDocument\tests\test_r05_context_budget.py:59: in test_fixed_request_cost_can_refuse_without_mutating_history
+    result = prepare(ContextManager(max_tokens=1024), messages, tmp_path, **options)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\test_r05_context_budget.py:16: in prepare
+    prepare_request = required_attr(manager, "prepare_request")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.context.ContextManager object at 0x000001B81CB87AD0>.prepare_request
+_____ test_fixed_request_cost_can_refuse_without_mutating_history[tools] ______
+designDocument\tests\test_r05_context_budget.py:59: in test_fixed_request_cost_can_refuse_without_mutating_history
+    result = prepare(ContextManager(max_tokens=1024), messages, tmp_path, **options)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\test_r05_context_budget.py:16: in prepare
+    prepare_request = required_attr(manager, "prepare_request")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.context.ContextManager object at 0x000001B81CB85220>.prepare_request
+____________ test_latest_user_request_is_never_silently_truncated _____________
+designDocument\tests\test_r05_context_budget.py:68: in test_latest_user_request_is_never_silently_truncated
+    result = prepare(ContextManager(max_tokens=512), messages, tmp_path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\test_r05_context_budget.py:16: in prepare
+    prepare_request = required_attr(manager, "prepare_request")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.context.ContextManager object at 0x000001B81CB470B0>.prepare_request
+_______________ test_count_includes_system_schemas_and_reserve ________________
+designDocument\tests\test_r05_context_budget.py:74: in test_count_includes_system_schemas_and_reserve
+    count_request = required_attr(context, "estimate_request_tokens")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <module 'corecoder.context' from 'E:\\github项目\\CoreCoder\\corecoder\\context.py'>.estimate_request_tokens
+__________ test_agent_refuses_before_sending_an_over_budget_request ___________
+designDocument\tests\test_r05_context_budget.py:83: in test_agent_refuses_before_sending_an_over_budget_request
+    exception_type = required_attr(context, "ContextBudgetExceeded")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <module 'corecoder.context' from 'E:\\github项目\\CoreCoder\\corecoder\\context.py'>.ContextBudgetExceeded
+___________ test_flatten_keeps_tool_identity_arguments_and_outcome ____________
+designDocument\tests\test_r06_summary_evidence.py:21: in test_flatten_keeps_tool_identity_arguments_and_outcome
+    assert fact in flat
+E   AssertionError: assert 'edit1' in '[user] USER_CONSTRAINT: preserve compatibility\n[tool] Edited successfully\n[assistant] REMAINING_TASK: run integration tests'
+__ test_fallback_summary_preserves_decisions_constraints_and_remaining_work ___
+designDocument\tests\test_r06_summary_evidence.py:27: in test_fallback_summary_preserves_decisions_constraints_and_remaining_work
+    assert fact in summary
+E   AssertionError: assert 'only-in-args.py' in '(no extractable context)'
+___________________ test_failure_is_not_reported_as_success ___________________
+designDocument\tests\test_r06_summary_evidence.py:35: in test_failure_is_not_reported_as_success
+    assert "only-in-args.py" in summary
+E   AssertionError: assert 'only-in-args.py' in 'Errors seen: Error: old_string not found; NO_WRITE_OCCURRED'
+_____________ test_summary_model_sees_late_facts_in_long_history ______________
+designDocument\tests\test_r06_summary_evidence.py:54: in test_summary_model_sees_late_facts_in_long_history
+    assert "Earlier observation 79" in joined
+E   assert 'Earlier observation 79' in "[{'role': 'system', 'content': 'Compress this conversation into a brief summary. Preserve: file paths edited, key dec...xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}]"
+_________________ test_large_arguments_keep_identity_and_tail _________________
+designDocument\tests\test_r06_summary_evidence.py:66: in test_large_arguments_keep_identity_and_tail
+    assert "big.py" in flat and "edit_file" in flat and "TAIL_DECISION" in flat
+E   AssertionError: assert ('big.py' in '')
+_______ test_invalid_arguments_are_replied_before_callbacks[arguments0] _______
+designDocument\tests\test_r07_tool_validation.py:27: in test_invalid_arguments_are_replied_before_callbacks
+    assert called == []
+E   AssertionError: assert ['display', '...sion', 'post'] == []
+E     
+E     Left contains 4 more items, first extra item: 'display'
+E     Use -v to get more diff
+__________ test_invalid_arguments_are_replied_before_callbacks[None] __________
+designDocument\tests\test_r07_tool_validation.py:27: in test_invalid_arguments_are_replied_before_callbacks
+    assert called == []
+E   AssertionError: assert ['display', '...sion', 'post'] == []
+E     
+E     Left contains 4 more items, first extra item: 'display'
+E     Use -v to get more diff
+__________ test_invalid_arguments_are_replied_before_callbacks[text] __________
+designDocument\tests\test_r07_tool_validation.py:27: in test_invalid_arguments_are_replied_before_callbacks
+    assert called == []
+E   AssertionError: assert ['display', '...sion', 'post'] == []
+E     
+E     Left contains 4 more items, first extra item: 'display'
+E     Use -v to get more diff
+___________ test_invalid_arguments_are_replied_before_callbacks[42] ___________
+designDocument\tests\test_r07_tool_validation.py:27: in test_invalid_arguments_are_replied_before_callbacks
+    assert called == []
+E   AssertionError: assert ['display', '...sion', 'post'] == []
+E     
+E     Left contains 4 more items, first extra item: 'display'
+E     Use -v to get more diff
+_______ test_invalid_arguments_are_replied_before_callbacks[arguments4] _______
+designDocument\tests\test_r07_tool_validation.py:27: in test_invalid_arguments_are_replied_before_callbacks
+    assert called == []
+E   AssertionError: assert ['display', '...sion', 'post'] == []
+E     
+E     Left contains 4 more items, first extra item: 'display'
+E     Use -v to get more diff
+_______ test_invalid_arguments_are_replied_before_callbacks[arguments5] _______
+designDocument\tests\test_r07_tool_validation.py:27: in test_invalid_arguments_are_replied_before_callbacks
+    assert called == []
+E   AssertionError: assert ['display', '...sion', 'post'] == []
+E     
+E     Left contains 4 more items, first extra item: 'display'
+E     Use -v to get more diff
+_______ test_invalid_arguments_are_replied_before_callbacks[arguments6] _______
+designDocument\tests\test_r07_tool_validation.py:27: in test_invalid_arguments_are_replied_before_callbacks
+    assert called == []
+E   AssertionError: assert ['display', '...sion', 'post'] == []
+E     
+E     Left contains 4 more items, first extra item: 'display'
+E     Use -v to get more diff
+_____________ test_truncated_json_retains_error_and_raw_arguments _____________
+designDocument\tests\test_r07_tool_validation.py:37: in test_truncated_json_retains_error_and_raw_arguments
+    assert getattr(call, "arguments_error", None), "Malformed JSON must not silently become {}"
+E   AssertionError: Malformed JSON must not silently become {}
+E   assert None
+E    +  where None = getattr(ToolCall(id='c1', name='write_file', arguments={}), 'arguments_error', None)
+_____ test_pre_execution_exceptions_produce_reply_without_write[display] ______
+designDocument\tests\test_r07_tool_validation.py:55: in test_pre_execution_exceptions_produce_reply_without_write
+    agent.chat("go", on_tool=fail if stage == "display" else None)
+corecoder\agent.py:96: in chat
+    on_tool(tc.name, tc.arguments)
+designDocument\tests\test_r07_tool_validation.py:46: in fail
+    raise RuntimeError(f"{stage} failed")
+E   RuntimeError: display failed
+_______ test_pre_execution_exceptions_produce_reply_without_write[pre] ________
+designDocument\tests\test_r07_tool_validation.py:55: in test_pre_execution_exceptions_produce_reply_without_write
+    agent.chat("go", on_tool=fail if stage == "display" else None)
+corecoder\agent.py:97: in chat
+    result = self._pre_hooks(tc) or self._permit(tc)
+             ^^^^^^^^^^^^^^^^^^^
+corecoder\agent.py:131: in _pre_hooks
+    return self.hooks.run_pre(tc.name, tc.arguments)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\test_r07_tool_validation.py:46: in fail
+    raise RuntimeError(f"{stage} failed")
+E   RuntimeError: pre failed
+____ test_pre_execution_exceptions_produce_reply_without_write[permission] ____
+designDocument\tests\test_r07_tool_validation.py:55: in test_pre_execution_exceptions_produce_reply_without_write
+    agent.chat("go", on_tool=fail if stage == "display" else None)
+corecoder\agent.py:97: in chat
+    result = self._pre_hooks(tc) or self._permit(tc)
+                                    ^^^^^^^^^^^^^^^^
+corecoder\agent.py:151: in _permit
+    return self.permission.check(tc.name, tc.arguments)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+corecoder\permissions.py:53: in check
+    verdict = self.ask(tool_name, arguments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\test_r07_tool_validation.py:46: in fail
+    raise RuntimeError(f"{stage} failed")
+E   RuntimeError: permission failed
+________________ test_post_hook_failure_keeps_executed_outcome ________________
+designDocument\tests\test_r07_tool_validation.py:71: in test_post_hook_failure_keeps_executed_outcome
+    agent.chat("go")
+corecoder\agent.py:100: in chat
+    self._post_hooks(tc, result)
+corecoder\agent.py:136: in _post_hooks
+    self.hooks.run_post(tc.name, tc.arguments, result)
+designDocument\tests\test_r07_tool_validation.py:65: in fail
+    raise RuntimeError("post failed")
+E   RuntimeError: post failed
+_________________ test_model_switch_does_not_reprice_history __________________
+designDocument\tests\test_r08_cost_ledger.py:28: in test_model_switch_does_not_reprice_history
+    assert priced_llm.estimated_cost == before
+E   assert 0.2 == 2.0
+E    +  where 0.2 = <corecoder.llm.LLM object at 0x000001B81CC64410>.estimated_cost
+______________ test_rate_changes_do_not_reprice_previous_entries ______________
+designDocument\tests\test_r08_cost_ledger.py:36: in test_rate_changes_do_not_reprice_previous_entries
+    assert priced_llm.estimated_cost == pytest.approx(2.0)
+E   assert 100.0 == 2.0 ± 2.0e-06
+E     
+E     comparison failed
+E     Obtained: 100.0
+E     Expected: 2.0 ± 2.0e-06
+_________ test_unknown_rate_exposes_known_subtotal_and_unknown_usage __________
+designDocument\tests\test_r08_cost_ledger.py:45: in test_unknown_rate_exposes_known_subtotal_and_unknown_usage
+    summary = required_attr(priced_llm, "cost_summary")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.llm.LLM object at 0x000001B81CC67710>.cost_summary
+_______________ test_missing_usage_is_distinct_from_zero_usage ________________
+designDocument\tests\test_r08_cost_ledger.py:55: in test_missing_usage_is_distinct_from_zero_usage
+    summary = required_attr(priced_llm, "cost_summary")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.llm.LLM object at 0x000001B81CC67020>.cost_summary
+_________ test_request_model_snapshot_survives_midstream_model_change _________
+designDocument\tests\test_r08_cost_ledger.py:68: in test_request_model_snapshot_survives_midstream_model_change
+    assert priced_llm.estimated_cost == pytest.approx(2.0)
+E   assert 0.2 == 2.0 ± 2.0e-06
+E     
+E     comparison failed
+E     Obtained: 0.2
+E     Expected: 2.0 ± 2.0e-06
+________________________ test_litellm_uses_same_ledger ________________________
+designDocument\tests\test_r08_cost_ledger.py:78: in test_litellm_uses_same_ledger
+    assert llm.estimated_cost == pytest.approx(2.0)
+E   assert 0.2 == 2.0 ± 2.0e-06
+E     
+E     comparison failed
+E     Obtained: 0.2
+E     Expected: 2.0 ± 2.0e-06
+_________ test_structured_result_has_stable_finish_status[completed] __________
+designDocument\tests\test_r09_cli_result.py:39: in test_structured_result_has_stable_finish_status
+    result = required_attr(agent, "chat_result")("go")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.agent.Agent object at 0x000001B81CB85D90>.chat_result
+_________ test_structured_result_has_stable_finish_status[max_rounds] _________
+designDocument\tests\test_r09_cli_result.py:39: in test_structured_result_has_stable_finish_status
+    result = required_attr(agent, "chat_result")("go")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.agent.Agent object at 0x000001B81CB18C50>.chat_result
+_________ test_structured_result_has_stable_finish_status[cancelled] __________
+designDocument\tests\test_r09_cli_result.py:39: in test_structured_result_has_stable_finish_status
+    result = required_attr(agent, "chat_result")("go")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.agent.Agent object at 0x000001B81CB1B1D0>.chat_result
+___________ test_structured_result_has_stable_finish_status[failed] ___________
+designDocument\tests\test_r09_cli_result.py:39: in test_structured_result_has_stable_finish_status
+    result = required_attr(agent, "chat_result")("go")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.agent.Agent object at 0x000001B81CD4AB10>.chat_result
+_____________ test_one_shot_exit_code_and_clean_json[completed-0] _____________
+designDocument\tests\test_r09_cli_result.py:50: in test_one_shot_exit_code_and_clean_json
+    assert cli._run_once(agent, "go", json_output=True) == code
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: _run_once() got an unexpected keyword argument 'json_output'
+____________ test_one_shot_exit_code_and_clean_json[max_rounds-2] _____________
+designDocument\tests\test_r09_cli_result.py:50: in test_one_shot_exit_code_and_clean_json
+    assert cli._run_once(agent, "go", json_output=True) == code
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: _run_once() got an unexpected keyword argument 'json_output'
+____________ test_one_shot_exit_code_and_clean_json[cancelled-130] ____________
+designDocument\tests\test_r09_cli_result.py:50: in test_one_shot_exit_code_and_clean_json
+    assert cli._run_once(agent, "go", json_output=True) == code
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: _run_once() got an unexpected keyword argument 'json_output'
+______________ test_one_shot_exit_code_and_clean_json[failed-1] _______________
+designDocument\tests\test_r09_cli_result.py:50: in test_one_shot_exit_code_and_clean_json
+    assert cli._run_once(agent, "go", json_output=True) == code
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: _run_once() got an unexpected keyword argument 'json_output'
+_________________ test_text_mode_reports_exhaustion_to_stderr _________________
+designDocument\tests\test_r09_cli_result.py:62: in test_text_mode_reports_exhaustion_to_stderr
+    assert code == 2
+E   assert None == 2
+_________________ test_main_propagates_one_shot_exit_code[0] __________________
+designDocument\tests\test_r09_cli_result.py:78: in test_main_propagates_one_shot_exit_code
+    with pytest.raises(SystemExit) as exc:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE SystemExit
+_________________ test_main_propagates_one_shot_exit_code[1] __________________
+designDocument\tests\test_r09_cli_result.py:78: in test_main_propagates_one_shot_exit_code
+    with pytest.raises(SystemExit) as exc:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE SystemExit
+_________________ test_main_propagates_one_shot_exit_code[2] __________________
+designDocument\tests\test_r09_cli_result.py:78: in test_main_propagates_one_shot_exit_code
+    with pytest.raises(SystemExit) as exc:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE SystemExit
+________________ test_main_propagates_one_shot_exit_code[130] _________________
+designDocument\tests\test_r09_cli_result.py:78: in test_main_propagates_one_shot_exit_code
+    with pytest.raises(SystemExit) as exc:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE SystemExit
+______________ test_completed_result_keeps_tool_failures_visible ______________
+designDocument\tests\test_r09_cli_result.py:88: in test_completed_result_keeps_tool_failures_visible
+    result = required_attr(agent, "chat_result")("go")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\support.py:12: in required_attr
+    assert hasattr(target, name), f"Proposed contract is not implemented: {target!r}.{name}"
+           ^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Proposed contract is not implemented: <corecoder.agent.Agent object at 0x000001B81CD77170>.chat_result
+_______ test_bad_hooks_structure_is_ignored_with_file_diagnostic[body0] _______
+designDocument\tests\test_r10_config_session_validation.py:20: in test_bad_hooks_structure_is_ignored_with_file_diagnostic
+    hooks = load_hooks(path)
+            ^^^^^^^^^^^^^^^^
+corecoder\hooks.py:65: in load_hooks
+    pre = [h for h in data.get("PreToolUse", []) if h.get("command")]
+                      ^^^^^^^^
+E   AttributeError: 'list' object has no attribute 'get'
+_______ test_bad_hooks_structure_is_ignored_with_file_diagnostic[None] ________
+designDocument\tests\test_r10_config_session_validation.py:20: in test_bad_hooks_structure_is_ignored_with_file_diagnostic
+    hooks = load_hooks(path)
+            ^^^^^^^^^^^^^^^^
+corecoder\hooks.py:65: in load_hooks
+    pre = [h for h in data.get("PreToolUse", []) if h.get("command")]
+                      ^^^^^^^^
+E   AttributeError: 'NoneType' object has no attribute 'get'
+________ test_bad_hooks_structure_is_ignored_with_file_diagnostic[42] _________
+designDocument\tests\test_r10_config_session_validation.py:20: in test_bad_hooks_structure_is_ignored_with_file_diagnostic
+    hooks = load_hooks(path)
+            ^^^^^^^^^^^^^^^^
+corecoder\hooks.py:65: in load_hooks
+    pre = [h for h in data.get("PreToolUse", []) if h.get("command")]
+                      ^^^^^^^^
+E   AttributeError: 'int' object has no attribute 'get'
+_______ test_bad_hooks_structure_is_ignored_with_file_diagnostic[text] ________
+designDocument\tests\test_r10_config_session_validation.py:20: in test_bad_hooks_structure_is_ignored_with_file_diagnostic
+    hooks = load_hooks(path)
+            ^^^^^^^^^^^^^^^^
+corecoder\hooks.py:65: in load_hooks
+    pre = [h for h in data.get("PreToolUse", []) if h.get("command")]
+                      ^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'get'
+_______ test_bad_hooks_structure_is_ignored_with_file_diagnostic[body4] _______
+designDocument\tests\test_r10_config_session_validation.py:20: in test_bad_hooks_structure_is_ignored_with_file_diagnostic
+    hooks = load_hooks(path)
+            ^^^^^^^^^^^^^^^^
+corecoder\hooks.py:65: in load_hooks
+    pre = [h for h in data.get("PreToolUse", []) if h.get("command")]
+                                                    ^^^^^
+E   AttributeError: 'int' object has no attribute 'get'
+_______ test_bad_hooks_structure_is_ignored_with_file_diagnostic[body5] _______
+designDocument\tests\test_r10_config_session_validation.py:20: in test_bad_hooks_structure_is_ignored_with_file_diagnostic
+    hooks = load_hooks(path)
+            ^^^^^^^^^^^^^^^^
+corecoder\hooks.py:65: in load_hooks
+    pre = [h for h in data.get("PreToolUse", []) if h.get("command")]
+                                                    ^^^^^
+E   AttributeError: 'str' object has no attribute 'get'
+_______ test_bad_hooks_structure_is_ignored_with_file_diagnostic[body6] _______
+designDocument\tests\test_r10_config_session_validation.py:21: in test_bad_hooks_structure_is_ignored_with_file_diagnostic
+    assert not hooks
+E   assert not <corecoder.hooks.Hooks object at 0x000001B81CD0BBC0>
+_______ test_bad_hooks_structure_is_ignored_with_file_diagnostic[body7] _______
+designDocument\tests\test_r10_config_session_validation.py:21: in test_bad_hooks_structure_is_ignored_with_file_diagnostic
+    assert not hooks
+E   assert not <corecoder.hooks.Hooks object at 0x000001B81CC66E40>
+____________ test_mixed_hooks_keep_valid_entry_and_name_bad_field _____________
+designDocument\tests\test_r10_config_session_validation.py:29: in test_mixed_hooks_keep_valid_entry_and_name_bad_field
+    hooks = load_hooks(path)
+            ^^^^^^^^^^^^^^^^
+corecoder\hooks.py:65: in load_hooks
+    pre = [h for h in data.get("PreToolUse", []) if h.get("command")]
+                                                    ^^^^^
+E   AttributeError: 'int' object has no attribute 'get'
+________________ test_bad_mcp_root_never_starts_process[body0] ________________
+designDocument\tests\test_r10_config_session_validation.py:41: in test_bad_mcp_root_never_starts_process
+    assert mcp.load_mcp_tools(path) == []
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+corecoder\mcp.py:194: in load_mcp_tools
+    for name, spec in (data.get("mcpServers") or {}).items():
+                       ^^^^^^^^
+E   AttributeError: 'list' object has no attribute 'get'
+________________ test_bad_mcp_root_never_starts_process[None] _________________
+designDocument\tests\test_r10_config_session_validation.py:41: in test_bad_mcp_root_never_starts_process
+    assert mcp.load_mcp_tools(path) == []
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+corecoder\mcp.py:194: in load_mcp_tools
+    for name, spec in (data.get("mcpServers") or {}).items():
+                       ^^^^^^^^
+E   AttributeError: 'NoneType' object has no attribute 'get'
+_________________ test_bad_mcp_root_never_starts_process[42] __________________
+designDocument\tests\test_r10_config_session_validation.py:41: in test_bad_mcp_root_never_starts_process
+    assert mcp.load_mcp_tools(path) == []
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+corecoder\mcp.py:194: in load_mcp_tools
+    for name, spec in (data.get("mcpServers") or {}).items():
+                       ^^^^^^^^
+E   AttributeError: 'int' object has no attribute 'get'
+________________ test_bad_mcp_root_never_starts_process[body3] ________________
+designDocument\tests\test_r10_config_session_validation.py:41: in test_bad_mcp_root_never_starts_process
+    assert mcp.load_mcp_tools(path) == []
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+corecoder\mcp.py:194: in load_mcp_tools
+    for name, spec in (data.get("mcpServers") or {}).items():
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'list' object has no attribute 'items'
+________________ test_bad_mcp_root_never_starts_process[body4] ________________
+designDocument\tests\test_r10_config_session_validation.py:41: in test_bad_mcp_root_never_starts_process
+    assert mcp.load_mcp_tools(path) == []
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+corecoder\mcp.py:194: in load_mcp_tools
+    for name, spec in (data.get("mcpServers") or {}).items():
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'items'
+_______________ test_bad_mcp_entries_do_not_discard_good_server _______________
+designDocument\tests\test_r10_config_session_validation.py:63: in test_bad_mcp_entries_do_not_discard_good_server
+    assert started == ["good"]
+E   AssertionError: assert ['bad-command...-env', 'good'] == ['good']
+E     
+E     At index 0 diff: 'bad-command' != 'good'
+E     Left contains 3 more items, first extra item: 'bad-args'
+E     Use -v to get more diff
+------------------------------ Captured log call ------------------------------
+WARNING  corecoder.mcp:mcp.py:198 MCP server 'scalar' skipped: 'int' object is not subscriptable
+__________ test_invalid_sessions_are_skipped_by_load_and_list[body0] __________
+designDocument\tests\test_r10_config_session_validation.py:78: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.load_session("bad") is None
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+corecoder\session.py:67: in load_session
+    return data["messages"], data["model"]
+           ^^^^^^^^^^^^^^^^
+E   TypeError: list indices must be integers or slices, not str
+__________ test_invalid_sessions_are_skipped_by_load_and_list[None] ___________
+designDocument\tests\test_r10_config_session_validation.py:78: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.load_session("bad") is None
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+corecoder\session.py:67: in load_session
+    return data["messages"], data["model"]
+           ^^^^^^^^^^^^^^^^
+E   TypeError: 'NoneType' object is not subscriptable
+___________ test_invalid_sessions_are_skipped_by_load_and_list[42] ____________
+designDocument\tests\test_r10_config_session_validation.py:78: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.load_session("bad") is None
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+corecoder\session.py:67: in load_session
+    return data["messages"], data["model"]
+           ^^^^^^^^^^^^^^^^
+E   TypeError: 'int' object is not subscriptable
+__________ test_invalid_sessions_are_skipped_by_load_and_list[body3] __________
+designDocument\tests\test_r10_config_session_validation.py:79: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.list_sessions() == []
+E   AssertionError: assert [{'id': 'bad'...preview': ''}] == []
+E     
+E     Left contains one more item: {'id': 'bad', 'model': '?', 'saved_at': '?', 'preview': ''}
+E     Use -v to get more diff
+__________ test_invalid_sessions_are_skipped_by_load_and_list[body4] __________
+designDocument\tests\test_r10_config_session_validation.py:78: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.load_session("bad") is None
+E   AssertionError: assert ([], 42) is None
+E    +  where ([], 42) = <function load_session at 0x000001B81C8CFA60>('bad')
+E    +    where <function load_session at 0x000001B81C8CFA60> = session.load_session
+__________ test_invalid_sessions_are_skipped_by_load_and_list[body5] __________
+designDocument\tests\test_r10_config_session_validation.py:78: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.load_session("bad") is None
+E   AssertionError: assert ([42], 'm') is None
+E    +  where ([42], 'm') = <function load_session at 0x000001B81C8CFA60>('bad')
+E    +    where <function load_session at 0x000001B81C8CFA60> = session.load_session
+__________ test_invalid_sessions_are_skipped_by_load_and_list[body6] __________
+designDocument\tests\test_r10_config_session_validation.py:78: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.load_session("bad") is None
+E   AssertionError: assert ([{'role': 'invalid', 'content': 'x'}], 'm') is None
+E    +  where ([{'role': 'invalid', 'content': 'x'}], 'm') = <function load_session at 0x000001B81C8CFA60>('bad')
+E    +    where <function load_session at 0x000001B81C8CFA60> = session.load_session
+__________ test_invalid_sessions_are_skipped_by_load_and_list[body7] __________
+designDocument\tests\test_r10_config_session_validation.py:78: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.load_session("bad") is None
+E   AssertionError: assert ([{'role': 'user', 'content': 42}], 'm') is None
+E    +  where ([{'role': 'user', 'content': 42}], 'm') = <function load_session at 0x000001B81C8CFA60>('bad')
+E    +    where <function load_session at 0x000001B81C8CFA60> = session.load_session
+__________ test_invalid_sessions_are_skipped_by_load_and_list[body8] __________
+designDocument\tests\test_r10_config_session_validation.py:78: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.load_session("bad") is None
+E   AssertionError: assert ([{'role': 'tool', 'tool_call_id': 'orphan', 'content': 'x'}], 'm') is None
+E    +  where ([{'role': 'tool', 'tool_call_id': 'orphan', 'content': 'x'}], 'm') = <function load_session at 0x000001B81C8CFA60>('bad')
+E    +    where <function load_session at 0x000001B81C8CFA60> = session.load_session
+__________ test_invalid_sessions_are_skipped_by_load_and_list[body9] __________
+designDocument\tests\test_r10_config_session_validation.py:78: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.load_session("bad") is None
+E   AssertionError: assert ('wrong', 'm') is None
+E    +  where ('wrong', 'm') = <function load_session at 0x000001B81C8CFA60>('bad')
+E    +    where <function load_session at 0x000001B81C8CFA60> = session.load_session
+_________ test_invalid_sessions_are_skipped_by_load_and_list[body10] __________
+designDocument\tests\test_r10_config_session_validation.py:78: in test_invalid_sessions_are_skipped_by_load_and_list
+    assert session.load_session("bad") is None
+E   AssertionError: assert ([], 'm') is None
+E    +  where ([], 'm') = <function load_session at 0x000001B81C8CFA60>('bad')
+E    +    where <function load_session at 0x000001B81C8CFA60> = session.load_session
+_____________ test_atomic_save_failure_preserves_previous_archive _____________
+designDocument\tests\test_r10_config_session_validation.py:106: in test_atomic_save_failure_preserves_previous_archive
+    with pytest.raises(OSError, match="simulated save failure"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE OSError
+_______________ test_new_archive_has_version_and_no_credentials _______________
+designDocument\tests\test_r10_config_session_validation.py:115: in test_new_archive_has_version_and_no_credentials
+    assert data["schema_version"] == 2
+           ^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'schema_version'
+________________ test_all_pages_and_opaque_cursor_are_followed ________________
+designDocument\tests\test_r11_mcp_pagination.py:69: in test_all_pages_and_opaque_cursor_are_followed
+    assert [tool.name for tool in client.tools] == [f"mcp__paged__tool{i}" for i in range(3)]
+E   AssertionError: assert ['mcp__paged__tool0'] == ['mcp__paged_...paged__tool2']
+E     
+E     Right contains 2 more items, first extra item: 'mcp__paged__tool1'
+E     Use -v to get more diff
+_ test_bad_discovery_fails_atomically_and_reaps_process[repeat-cursor|pagination] _
+designDocument\tests\test_r11_mcp_pagination.py:102: in test_bad_discovery_fails_atomically_and_reaps_process
+    with pytest.raises(mcp.MCPError, match=pattern):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE MCPError
+_ test_bad_discovery_fails_atomically_and_reaps_process[duplicate-duplicate|collision] _
+designDocument\tests\test_r11_mcp_pagination.py:102: in test_bad_discovery_fails_atomically_and_reaps_process
+    with pytest.raises(mcp.MCPError, match=pattern):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE MCPError
+_____ test_bad_discovery_fails_atomically_and_reaps_process[crash-exited] _____
+designDocument\tests\test_r11_mcp_pagination.py:102: in test_bad_discovery_fails_atomically_and_reaps_process
+    with pytest.raises(mcp.MCPError, match=pattern):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE MCPError
+_ test_bad_discovery_fails_atomically_and_reaps_process[malformed-schema|tools|invalid] _
+designDocument\tests\test_r11_mcp_pagination.py:103: in test_bad_discovery_fails_atomically_and_reaps_process
+    client = connect(server, mode)
+             ^^^^^^^^^^^^^^^^^^^^^
+designDocument\tests\test_r11_mcp_pagination.py:63: in connect
+    return mcp.MCPClient("paged", sys.executable, [str(server), mode])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+corecoder\mcp.py:72: in __init__
+    self.tools = [MCPTool(self, t) for t in listed.get("tools", [])]
+                  ^^^^^^^^^^^^^^^^
+corecoder\mcp.py:170: in __init__
+    self._remote_name = spec["name"]
+                        ^^^^^^^^^^^^
+E   TypeError: 'int' object is not subscriptable
+_ test_bad_discovery_fails_atomically_and_reaps_process[version-version|protocol] _
+designDocument\tests\test_r11_mcp_pagination.py:102: in test_bad_discovery_fails_atomically_and_reaps_process
+    with pytest.raises(mcp.MCPError, match=pattern):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE MCPError
+________________ test_distinct_endless_cursors_hit_page_limit _________________
+designDocument\tests\test_r11_mcp_pagination.py:111: in test_distinct_endless_cursors_hit_page_limit
+    assert hasattr(mcp, "MAX_DISCOVERY_PAGES"), "R11 must bound discovery independently of cursor equality"
+E   AssertionError: R11 must bound discovery independently of cursor equality
+E   assert False
+E    +  where False = hasattr(mcp, 'MAX_DISCOVERY_PAGES')
+___________________ test_whole_discovery_uses_one_deadline ____________________
+designDocument\tests\test_r11_mcp_pagination.py:126: in test_whole_discovery_uses_one_deadline
+    with pytest.raises(mcp.MCPError, match="timeout|deadline|no answer"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE MCPError
+=========================== short test summary info ===========================
+FAILED designDocument\tests\test_r01_agent_state_isolation.py::test_default_tools_and_parent_are_distinct
+FAILED designDocument\tests\test_r01_agent_state_isolation.py::test_todo_and_reset_do_not_cross_agents
+FAILED designDocument\tests\test_r01_agent_state_isolation.py::test_child_uses_own_parents_model_and_denial
+FAILED designDocument\tests\test_r01_agent_state_isolation.py::test_child_todo_does_not_replace_parent_todo
+FAILED designDocument\tests\test_r02_workspace_paths.py::test_cd_then_all_file_tools_share_cwd[sub]
+FAILED designDocument\tests\test_r02_workspace_paths.py::test_cd_then_all_file_tools_share_cwd[\u542b\u7a7a\u683c \u5b50\u76ee\u5f55]
+FAILED designDocument\tests\test_r02_workspace_paths.py::test_same_batch_cd_then_write_is_ordered
+FAILED designDocument\tests\test_r02_workspace_paths.py::test_child_starts_here_and_cannot_change_parent_cwd
+FAILED designDocument\tests\test_r02_workspace_paths.py::test_failed_cd_and_absolute_paths
+FAILED designDocument\tests\test_r03_undo_conflicts.py::test_external_edit_preserves_file_and_checkpoint[True]
+FAILED designDocument\tests\test_r03_undo_conflicts.py::test_external_edit_preserves_file_and_checkpoint[False]
+FAILED designDocument\tests\test_r03_undo_conflicts.py::test_external_delete_is_a_conflict
+FAILED designDocument\tests\test_r03_undo_conflicts.py::test_force_undo_is_explicit
+FAILED designDocument\tests\test_r03_undo_conflicts.py::test_conflict_guard_survives_reload
+FAILED designDocument\tests\test_r04_undo_transaction.py::test_restore_write_failure_keeps_entry_and_allows_retry
+FAILED designDocument\tests\test_r04_undo_transaction.py::test_created_file_delete_failure_keeps_entry
+FAILED designDocument\tests\test_r04_undo_transaction.py::test_checkpoint_commit_failure_compensates_and_remains_retryable
+FAILED designDocument\tests\test_r04_undo_transaction.py::test_undo_failure_does_not_end_repl
+FAILED designDocument\tests\test_r05_context_budget.py::test_single_line_output_is_archived_and_fits[single-line]
+FAILED designDocument\tests\test_r05_context_budget.py::test_single_line_output_is_archived_and_fits[cjk]
+FAILED designDocument\tests\test_r05_context_budget.py::test_oversized_last_group_keeps_every_reply_and_fits
+FAILED designDocument\tests\test_r05_context_budget.py::test_fixed_request_cost_can_refuse_without_mutating_history[system]
+FAILED designDocument\tests\test_r05_context_budget.py::test_fixed_request_cost_can_refuse_without_mutating_history[tools]
+FAILED designDocument\tests\test_r05_context_budget.py::test_latest_user_request_is_never_silently_truncated
+FAILED designDocument\tests\test_r05_context_budget.py::test_count_includes_system_schemas_and_reserve
+FAILED designDocument\tests\test_r05_context_budget.py::test_agent_refuses_before_sending_an_over_budget_request
+FAILED designDocument\tests\test_r06_summary_evidence.py::test_flatten_keeps_tool_identity_arguments_and_outcome
+FAILED designDocument\tests\test_r06_summary_evidence.py::test_fallback_summary_preserves_decisions_constraints_and_remaining_work
+FAILED designDocument\tests\test_r06_summary_evidence.py::test_failure_is_not_reported_as_success
+FAILED designDocument\tests\test_r06_summary_evidence.py::test_summary_model_sees_late_facts_in_long_history
+FAILED designDocument\tests\test_r06_summary_evidence.py::test_large_arguments_keep_identity_and_tail
+FAILED designDocument\tests\test_r07_tool_validation.py::test_invalid_arguments_are_replied_before_callbacks[arguments0]
+FAILED designDocument\tests\test_r07_tool_validation.py::test_invalid_arguments_are_replied_before_callbacks[None]
+FAILED designDocument\tests\test_r07_tool_validation.py::test_invalid_arguments_are_replied_before_callbacks[text]
+FAILED designDocument\tests\test_r07_tool_validation.py::test_invalid_arguments_are_replied_before_callbacks[42]
+FAILED designDocument\tests\test_r07_tool_validation.py::test_invalid_arguments_are_replied_before_callbacks[arguments4]
+FAILED designDocument\tests\test_r07_tool_validation.py::test_invalid_arguments_are_replied_before_callbacks[arguments5]
+FAILED designDocument\tests\test_r07_tool_validation.py::test_invalid_arguments_are_replied_before_callbacks[arguments6]
+FAILED designDocument\tests\test_r07_tool_validation.py::test_truncated_json_retains_error_and_raw_arguments
+FAILED designDocument\tests\test_r07_tool_validation.py::test_pre_execution_exceptions_produce_reply_without_write[display]
+FAILED designDocument\tests\test_r07_tool_validation.py::test_pre_execution_exceptions_produce_reply_without_write[pre]
+FAILED designDocument\tests\test_r07_tool_validation.py::test_pre_execution_exceptions_produce_reply_without_write[permission]
+FAILED designDocument\tests\test_r07_tool_validation.py::test_post_hook_failure_keeps_executed_outcome
+FAILED designDocument\tests\test_r08_cost_ledger.py::test_model_switch_does_not_reprice_history
+FAILED designDocument\tests\test_r08_cost_ledger.py::test_rate_changes_do_not_reprice_previous_entries
+FAILED designDocument\tests\test_r08_cost_ledger.py::test_unknown_rate_exposes_known_subtotal_and_unknown_usage
+FAILED designDocument\tests\test_r08_cost_ledger.py::test_missing_usage_is_distinct_from_zero_usage
+FAILED designDocument\tests\test_r08_cost_ledger.py::test_request_model_snapshot_survives_midstream_model_change
+FAILED designDocument\tests\test_r08_cost_ledger.py::test_litellm_uses_same_ledger
+FAILED designDocument\tests\test_r09_cli_result.py::test_structured_result_has_stable_finish_status[completed]
+FAILED designDocument\tests\test_r09_cli_result.py::test_structured_result_has_stable_finish_status[max_rounds]
+FAILED designDocument\tests\test_r09_cli_result.py::test_structured_result_has_stable_finish_status[cancelled]
+FAILED designDocument\tests\test_r09_cli_result.py::test_structured_result_has_stable_finish_status[failed]
+FAILED designDocument\tests\test_r09_cli_result.py::test_one_shot_exit_code_and_clean_json[completed-0]
+FAILED designDocument\tests\test_r09_cli_result.py::test_one_shot_exit_code_and_clean_json[max_rounds-2]
+FAILED designDocument\tests\test_r09_cli_result.py::test_one_shot_exit_code_and_clean_json[cancelled-130]
+FAILED designDocument\tests\test_r09_cli_result.py::test_one_shot_exit_code_and_clean_json[failed-1]
+FAILED designDocument\tests\test_r09_cli_result.py::test_text_mode_reports_exhaustion_to_stderr
+FAILED designDocument\tests\test_r09_cli_result.py::test_main_propagates_one_shot_exit_code[0]
+FAILED designDocument\tests\test_r09_cli_result.py::test_main_propagates_one_shot_exit_code[1]
+FAILED designDocument\tests\test_r09_cli_result.py::test_main_propagates_one_shot_exit_code[2]
+FAILED designDocument\tests\test_r09_cli_result.py::test_main_propagates_one_shot_exit_code[130]
+FAILED designDocument\tests\test_r09_cli_result.py::test_completed_result_keeps_tool_failures_visible
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_hooks_structure_is_ignored_with_file_diagnostic[body0]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_hooks_structure_is_ignored_with_file_diagnostic[None]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_hooks_structure_is_ignored_with_file_diagnostic[42]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_hooks_structure_is_ignored_with_file_diagnostic[text]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_hooks_structure_is_ignored_with_file_diagnostic[body4]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_hooks_structure_is_ignored_with_file_diagnostic[body5]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_hooks_structure_is_ignored_with_file_diagnostic[body6]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_hooks_structure_is_ignored_with_file_diagnostic[body7]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_mixed_hooks_keep_valid_entry_and_name_bad_field
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_mcp_root_never_starts_process[body0]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_mcp_root_never_starts_process[None]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_mcp_root_never_starts_process[42]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_mcp_root_never_starts_process[body3]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_mcp_root_never_starts_process[body4]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_bad_mcp_entries_do_not_discard_good_server
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[body0]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[None]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[42]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[body3]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[body4]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[body5]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[body6]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[body7]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[body8]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[body9]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_invalid_sessions_are_skipped_by_load_and_list[body10]
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_atomic_save_failure_preserves_previous_archive
+FAILED designDocument\tests\test_r10_config_session_validation.py::test_new_archive_has_version_and_no_credentials
+FAILED designDocument\tests\test_r11_mcp_pagination.py::test_all_pages_and_opaque_cursor_are_followed
+FAILED designDocument\tests\test_r11_mcp_pagination.py::test_bad_discovery_fails_atomically_and_reaps_process[repeat-cursor|pagination]
+FAILED designDocument\tests\test_r11_mcp_pagination.py::test_bad_discovery_fails_atomically_and_reaps_process[duplicate-duplicate|collision]
+FAILED designDocument\tests\test_r11_mcp_pagination.py::test_bad_discovery_fails_atomically_and_reaps_process[crash-exited]
+FAILED designDocument\tests\test_r11_mcp_pagination.py::test_bad_discovery_fails_atomically_and_reaps_process[malformed-schema|tools|invalid]
+FAILED designDocument\tests\test_r11_mcp_pagination.py::test_bad_discovery_fails_atomically_and_reaps_process[version-version|protocol]
+FAILED designDocument\tests\test_r11_mcp_pagination.py::test_distinct_endless_cursors_hit_page_limit
+FAILED designDocument\tests\test_r11_mcp_pagination.py::test_whole_discovery_uses_one_deadline
+99 failed, 5 passed in 3.71s

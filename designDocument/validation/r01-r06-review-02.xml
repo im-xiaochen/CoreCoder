@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="14" skipped="1" tests="65" time="3.871" timestamp="2026-10-08T18:34:45.097148+08:00" hostname="LAPTOP-E93N3PJO"><testcase classname="tests.test_r01_agent_state_isolation" name="test_default_tools_and_parent_are_distinct" time="0.097" /><testcase classname="tests.test_r01_agent_state_isolation" name="test_todo_and_reset_do_not_cross_agents" time="0.006" /><testcase classname="tests.test_r01_agent_state_isolation" name="test_child_uses_own_parents_model_and_denial" time="0.012" /><testcase classname="tests.test_r01_agent_state_isolation" name="test_child_todo_does_not_replace_parent_todo" time="0.012" /><testcase classname="tests.test_r02_workspace_paths" name="test_cd_then_all_file_tools_share_cwd[sub]" time="0.233" /><testcase classname="tests.test_r02_workspace_paths" name="test_cd_then_all_file_tools_share_cwd[\u542b\u7a7a\u683c \u5b50\u76ee\u5f55]" time="0.224" /><testcase classname="tests.test_r02_workspace_paths" name="test_same_batch_cd_then_write_is_ordered" time="0.186" /><testcase classname="tests.test_r02_workspace_paths" name="test_child_starts_here_and_cannot_change_parent_cwd" time="0.214" /><testcase classname="tests.test_r02_workspace_paths" name="test_failed_cd_and_absolute_paths" time="0.189" /><testcase classname="tests.test_r03_undo_conflicts" name="test_unchanged_postimage_can_be_undone" time="0.041"><failure message="AssertionError: assert b'agent' == b'original\r\n'&#10;  &#10;  At index 0 diff: b'a' != b'o'&#10;  Use -v to get more diff">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_unchanged_postimage_can_b0')
+
+    def test_unchanged_postimage_can_be_undone(tmp_path):
+        target = tmp_path / "file.txt"
+        target.write_bytes(b"original\r\n")
+        WriteFileTool().execute(str(target), "agent")
+        checkpoints.undo()
+&gt;       assert target.read_bytes() == b"original\r\n"
+E       AssertionError: assert b'agent' == b'original\r\n'
+E         
+E         At index 0 diff: b'a' != b'o'
+E         Use -v to get more diff
+
+designDocument\tests\test_r03_undo_conflicts.py:14: AssertionError</failure></testcase><testcase classname="tests.test_r03_undo_conflicts" name="test_external_edit_preserves_file_and_checkpoint[True]" time="0.043" /><testcase classname="tests.test_r03_undo_conflicts" name="test_external_edit_preserves_file_and_checkpoint[False]" time="0.035" /><testcase classname="tests.test_r03_undo_conflicts" name="test_external_delete_is_a_conflict" time="0.037" /><testcase classname="tests.test_r03_undo_conflicts" name="test_force_undo_is_explicit" time="0.051"><failure message="AssertionError: assert 'human' == 'original'&#10;  &#10;  - original&#10;  + human">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_force_undo_is_explicit0')
+
+    def test_force_undo_is_explicit(tmp_path):
+        target = tmp_path / "file.txt"
+        target.write_text("original", encoding="utf-8")
+        WriteFileTool().execute(str(target), "agent")
+        target.write_text("human", encoding="utf-8")
+        checkpoints.undo(force=True)
+&gt;       assert target.read_text(encoding="utf-8") == "original"
+E       AssertionError: assert 'human' == 'original'
+E         
+E         - original
+E         + human
+
+designDocument\tests\test_r03_undo_conflicts.py:49: AssertionError</failure></testcase><testcase classname="tests.test_r03_undo_conflicts" name="test_conflict_guard_survives_reload" time="0.047" /><testcase classname="tests.test_r04_undo_transaction" name="test_restore_write_failure_keeps_entry_and_allows_retry" time="0.051"><failure message="AssertionError: assert 'agent' == 'original'&#10;  &#10;  - original&#10;  + agent">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_restore_write_failure_kee0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000269A12BEB40&gt;
+
+    def test_restore_write_failure_keeps_entry_and_allows_retry(tmp_path, monkeypatch):
+        target = prepare_file(tmp_path)
+        with monkeypatch.context() as scoped:
+            def fail(*args, **kwargs):
+                raise OSError("simulated disk failure")
+    
+            scoped.setattr(Path, "write_bytes", fail)
+            result = checkpoints.undo()
+        assert "error" in result.lower()
+        assert target.read_text(encoding="utf-8") == "agent"
+        assert checkpoints.pending() == 1
+        checkpoints.undo()
+&gt;       assert target.read_text(encoding="utf-8") == "original"
+E       AssertionError: assert 'agent' == 'original'
+E         
+E         - original
+E         + agent
+
+designDocument\tests\test_r04_undo_transaction.py:32: AssertionError</failure></testcase><testcase classname="tests.test_r04_undo_transaction" name="test_created_file_delete_failure_keeps_entry" time="0.051" /><testcase classname="tests.test_r04_undo_transaction" name="test_checkpoint_commit_failure_compensates_and_remains_retryable" time="0.083"><failure message="AssertionError: assert 'agent' == 'original'&#10;  &#10;  - original&#10;  + agent">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_checkpoint_commit_failure0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000269A13837D0&gt;
+
+    def test_checkpoint_commit_failure_compensates_and_remains_retryable(tmp_path, monkeypatch):
+        target = prepare_file(tmp_path)
+        original_replace = Path.replace
+    
+        def deny_commit(path, destination):
+            if Path(destination) == checkpoints.CHECKPOINTS_FILE:
+                raise OSError("simulated checkpoint commit failure")
+            return original_replace(path, destination)
+    
+        with monkeypatch.context() as scoped:
+            scoped.setattr(Path, "replace", deny_commit)
+            result = checkpoints.undo()
+        assert "error" in result.lower()
+        assert target.read_text(encoding="utf-8") == "agent"
+        assert checkpoints.pending() == 1
+        checkpoints._stack.clear()
+        checkpoints._loaded = False
+        assert checkpoints.pending() == 1
+        checkpoints.undo()
+&gt;       assert target.read_text(encoding="utf-8") == "original"
+E       AssertionError: assert 'agent' == 'original'
+E         
+E         - original
+E         + agent
+
+designDocument\tests\test_r04_undo_transaction.py:75: AssertionError</failure></testcase><testcase classname="tests.test_r04_undo_transaction" name="test_undo_failure_does_not_end_repl" time="0.043" /><testcase classname="tests.test_r05_context_budget" name="test_single_line_output_is_archived_and_fits[single-line]" time="0.016" /><testcase classname="tests.test_r05_context_budget" name="test_single_line_output_is_archived_and_fits[cjk]" time="0.039" /><testcase classname="tests.test_r05_context_budget" name="test_oversized_last_group_keeps_every_reply_and_fits" time="0.012" /><testcase classname="tests.test_r05_context_budget" name="test_fixed_request_cost_can_refuse_without_mutating_history[system]" time="0.005" /><testcase classname="tests.test_r05_context_budget" name="test_fixed_request_cost_can_refuse_without_mutating_history[tools]" time="0.006" /><testcase classname="tests.test_r05_context_budget" name="test_latest_user_request_is_never_silently_truncated" time="0.035" /><testcase classname="tests.test_r05_context_budget" name="test_count_includes_system_schemas_and_reserve" time="0.004" /><testcase classname="tests.test_r05_context_budget" name="test_agent_refuses_before_sending_an_over_budget_request" time="0.013" /><testcase classname="tests.test_r06_summary_evidence" name="test_flatten_keeps_tool_identity_arguments_and_outcome" time="0.005" /><testcase classname="tests.test_r06_summary_evidence" name="test_fallback_summary_preserves_decisions_constraints_and_remaining_work" time="0.004" /><testcase classname="tests.test_r06_summary_evidence" name="test_failure_is_not_reported_as_success" time="0.003" /><testcase classname="tests.test_r06_summary_evidence" name="test_summary_model_sees_late_facts_in_long_history" time="0.009" /><testcase classname="tests.test_r06_summary_evidence" name="test_large_arguments_keep_identity_and_tail" time="0.004" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_bound_agent_tool_cannot_be_stolen" time="0.006" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_custom_mutable_tool_without_clone_cannot_cross_agents" time="0.007" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_child_preserves_custom_read_guard" time="0.010" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_reverse_authority_child_keeps_allowing_parent" time="0.045" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_child_cannot_gain_tools_omitted_by_parent" time="0.008" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_state_fork_isolates_mutable_values_and_cwd" time="0.007" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_write_then_read_batch_observes_new_bytes" time="0.039" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_complex_cd_is_tracked_or_explicitly_reported" time="0.164" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_character_pagination_can_read_a_single_line_archive" time="0.014" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_empty_before_image_is_distinct_from_missing_file" time="0.039"><failure message="AssertionError: assert 'Restored' in 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_empty_before_image_is_dis0\\empty.txt: [Errno 9] Bad file descriptor; retryable'">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_empty_before_image_is_dis0')
+
+    def test_empty_before_image_is_distinct_from_missing_file(tmp_path):
+        from corecoder import checkpoints
+        from corecoder.tools.write import WriteFileTool
+    
+        target = tmp_path / "empty.txt"
+        target.write_bytes(b"")
+        WriteFileTool().execute(str(target), "filled")
+        result = checkpoints.undo()
+&gt;       assert "Restored" in result
+E       AssertionError: assert 'Restored' in 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_empty_before_image_is_dis0\\empty.txt: [Errno 9] Bad file descriptor; retryable'
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:149: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_agent_checkpoint_stores_are_separate" time="0.093" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_cli_undo_never_selects_the_global_stack" time="0.084" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_cli_force_undo_requires_a_targeted_choice[n-human]" time="0.052" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_cli_force_undo_requires_a_targeted_choice[y-before]" time="0.070"><failure message="AssertionError: assert 'human' == 'before'&#10;  &#10;  - before&#10;  + human">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_cli_force_undo_requires_a1')
+state_factory = &lt;function state_factory.&lt;locals&gt;.create at 0x00000269A13A2FC0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000269A15F2FC0&gt;
+answer = 'y', expected = 'before'
+
+    @pytest.mark.parametrize("answer, expected", [("n", "human"), ("y", "before")])
+    def test_cli_force_undo_requires_a_targeted_choice(tmp_path, state_factory, monkeypatch, answer, expected):
+        target = tmp_path / "force-choice.txt"
+        target.write_text("before", encoding="utf-8")
+        agent = Agent(ScriptedLLM([]), state=state_factory(), permission=Permission(allow_all=True))
+        agent._tool_by_name["write_file"].execute(str(target), "agent")
+        target.write_text("human", encoding="utf-8")
+        consumed = drive_repl(monkeypatch, agent, ["/undo --force", answer, "quit"])
+        assert consumed == ["/undo --force", answer, "quit"]
+&gt;       assert target.read_text(encoding="utf-8") == expected
+E       AssertionError: assert 'human' == 'before'
+E         
+E         - before
+E         + human
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:190: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_legacy_checkpoint_requires_explicit_force" time="0.028"><failure message="AssertionError: assert 'Restored' in 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_legacy_checkpoint_require0\\legacy.txt: [Errno 9] Bad file descriptor; retryable'&#10; +  where 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_legacy_checkpoint_require0\\legacy.txt: [Errno 9] Bad file descriptor; retryable' = &lt;function undo at 0x00000269A107CEA0&gt;(force=True)&#10; +    where &lt;function undo at 0x00000269A107CEA0&gt; = &lt;module 'corecoder.checkpoints' from 'E:\\github项目\\CoreCoder\\corecoder\\checkpoints.py'&gt;.undo">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_legacy_checkpoint_require0')
+
+    def test_legacy_checkpoint_requires_explicit_force(tmp_path):
+        from corecoder import checkpoints
+    
+        target = tmp_path / "legacy.txt"
+        target.write_bytes(b"before")
+        checkpoints.record(target)
+        target.write_bytes(b"unverified after")
+        assert "conflict" in checkpoints.undo().lower()
+        assert target.read_bytes() == b"unverified after" and checkpoints.pending() == 1
+&gt;       assert "Restored" in checkpoints.undo(force=True)
+E       AssertionError: assert 'Restored' in 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_legacy_checkpoint_require0\\legacy.txt: [Errno 9] Bad file descriptor; retryable'
+E        +  where 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_legacy_checkpoint_require0\\legacy.txt: [Errno 9] Bad file descriptor; retryable' = &lt;function undo at 0x00000269A107CEA0&gt;(force=True)
+E        +    where &lt;function undo at 0x00000269A107CEA0&gt; = &lt;module 'corecoder.checkpoints' from 'E:\\github项目\\CoreCoder\\corecoder\\checkpoints.py'&gt;.undo
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:203: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_reload_does_not_follow_a_replacement_symlink" time="0.030"><skipped type="pytest.skip" message="Host does not permit creating test symlinks: [WinError 1314] 客户端没有所需的特权。: 'E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_reload_does_not_follow_a_0\\unrelated.txt' -&gt; 'E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_reload_does_not_follow_a_0\\original.txt'">E:\github项目\CoreCoder\designDocument\tests\test_acceptance_r01_r06_extended.py:220: Host does not permit creating test symlinks: [WinError 1314] 客户端没有所需的特权。: 'E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_reload_does_not_follow_a_0\\unrelated.txt' -&gt; 'E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_reload_does_not_follow_a_0\\original.txt'</skipped></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_journal_persistence_failure_does_not_touch_target" time="0.049"><failure message="AssertionError: assert 'Restored' in 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_journal_persistence_failu0\\journal.txt: [Errno 9] Bad file descriptor; retryable'&#10; +  where 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_journal_persistence_failu0\\journal.txt: [Errno 9] Bad file descriptor; retryable' = &lt;function undo at 0x00000269A107CEA0&gt;()&#10; +    where &lt;function undo at 0x00000269A107CEA0&gt; = &lt;module 'corecoder.checkpoints' from 'E:\\github项目\\CoreCoder\\corecoder\\checkpoints.py'&gt;.undo">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_journal_persistence_failu0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000269A1381A00&gt;
+
+    def test_journal_persistence_failure_does_not_touch_target(tmp_path, monkeypatch):
+        from corecoder import checkpoints
+        from corecoder.tools.write import WriteFileTool
+    
+        target = tmp_path / "journal.txt"
+        target.write_bytes(b"before")
+        WriteFileTool().execute(str(target), "after")
+        replace = Path.replace
+    
+        def fail_journal(path, destination):
+            if Path(destination) not in {target, checkpoints.CHECKPOINTS_FILE}:
+                raise OSError("journal storage unavailable")
+            return replace(path, destination)
+    
+        with monkeypatch.context() as scoped:
+            scoped.setattr(Path, "replace", fail_journal)
+            result = checkpoints.undo()
+        assert "error" in result.lower() and "journal" in result.lower()
+        assert target.read_bytes() == b"after" and checkpoints.pending() == 1
+&gt;       assert "Restored" in checkpoints.undo()
+E       AssertionError: assert 'Restored' in 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_journal_persistence_failu0\\journal.txt: [Errno 9] Bad file descriptor; retryable'
+E        +  where 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_journal_persistence_failu0\\journal.txt: [Errno 9] Bad file descriptor; retryable' = &lt;function undo at 0x00000269A107CEA0&gt;()
+E        +    where &lt;function undo at 0x00000269A107CEA0&gt; = &lt;module 'corecoder.checkpoints' from 'E:\\github项目\\CoreCoder\\corecoder\\checkpoints.py'&gt;.undo
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:246: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_restart_after_compensated_undo_does_not_overwrite_external_change" time="0.065" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_journal_phase_failure_compensates_or_blocks_following_write" time="0.044"><failure message="AssertionError: assert ('Restored' in 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_journal_phase_failure_com0\\phase-failure.txt: [Errno 9] Bad file descriptor; retryable')">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_journal_phase_failure_com0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000269A1380260&gt;
+
+    def test_journal_phase_failure_compensates_or_blocks_following_write(tmp_path, monkeypatch):
+        from corecoder import checkpoints
+        from corecoder.tools.write import WriteFileTool
+    
+        target = tmp_path / "phase-failure.txt"
+        target.write_bytes(b"before")
+        WriteFileTool().execute(str(target), "after")
+        replace = Path.replace
+        journal_commits = []
+    
+        def fail_phase_update(path, destination):
+            if "journal" in Path(destination).name:
+                journal_commits.append(str(path))
+                if len(journal_commits) == 2:
+                    raise OSError("journal phase update unavailable")
+            return replace(path, destination)
+    
+        with monkeypatch.context() as scoped:
+            scoped.setattr(Path, "replace", fail_phase_update)
+            result = checkpoints.undo()
+        if len(journal_commits) &lt; 2:
+&gt;           assert "Restored" in result and target.read_bytes() == b"before"
+E           AssertionError: assert ('Restored' in 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_journal_phase_failure_com0\\phase-failure.txt: [Errno 9] Bad file descriptor; retryable')
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:298: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_failed_compensation_blocks_mutation_and_survives_restart" time="0.045"><failure message="AssertionError: assert 'recovery_required' in 'error: restore target e:\\github项目\\corecoder\\designdocument\\validation\\tmp-integration-review-02\\test_failed_compensation_block0\\compensation.txt: [errno 9] bad file descriptor; retryable'&#10; +  where 'error: restore target e:\\github项目\\corecoder\\designdocument\\validation\\tmp-integration-review-02\\test_failed_compensation_block0\\compensation.txt: [errno 9] bad file descriptor; retryable' = &lt;built-in method lower of str object at 0x00000269A13412C0&gt;()&#10; +    where &lt;built-in method lower of str object at 0x00000269A13412C0&gt; = 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_failed_compensation_block0\\compensation.txt: [Errno 9] Bad file descriptor; retryable'.lower">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_failed_compensation_block0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000269A135FCB0&gt;
+
+    def test_failed_compensation_blocks_mutation_and_survives_restart(tmp_path, monkeypatch):
+        from corecoder import checkpoints
+        from corecoder.tools.write import WriteFileTool
+    
+        target = tmp_path / "compensation.txt"
+        target.write_bytes(b"before")
+        WriteFileTool().execute(str(target), "after")
+        replace = Path.replace
+        replacements = []
+    
+        def fail_commit_and_compensation(path, destination):
+            if Path(destination) == checkpoints.CHECKPOINTS_FILE:
+                raise OSError("commit unavailable")
+            if Path(destination) == target:
+                replacements.append(str(path))
+                if len(replacements) &gt; 1:
+                    raise OSError("compensation unavailable")
+            return replace(path, destination)
+    
+        with monkeypatch.context() as scoped:
+            scoped.setattr(Path, "replace", fail_commit_and_compensation)
+            result = checkpoints.undo()
+&gt;       assert "recovery_required" in result.lower()
+E       AssertionError: assert 'recovery_required' in 'error: restore target e:\\github项目\\corecoder\\designdocument\\validation\\tmp-integration-review-02\\test_failed_compensation_block0\\compensation.txt: [errno 9] bad file descriptor; retryable'
+E        +  where 'error: restore target e:\\github项目\\corecoder\\designdocument\\validation\\tmp-integration-review-02\\test_failed_compensation_block0\\compensation.txt: [errno 9] bad file descriptor; retryable' = &lt;built-in method lower of str object at 0x00000269A13412C0&gt;()
+E        +    where &lt;built-in method lower of str object at 0x00000269A13412C0&gt; = 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_failed_compensation_block0\\compensation.txt: [Errno 9] Bad file descriptor; retryable'.lower
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:331: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_finalize_storage_failure_keeps_original_or_recoverable_change" time="0.069"><failure message="AssertionError: assert 'Restored' in 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_finalize_storage_failure_0\\finalize.txt: [Errno 9] Bad file descriptor; retryable'&#10; +  where 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_finalize_storage_failure_0\\finalize.txt: [Errno 9] Bad file descriptor; retryable' = &lt;function undo at 0x00000269A107CEA0&gt;()&#10; +    where &lt;function undo at 0x00000269A107CEA0&gt; = &lt;module 'corecoder.checkpoints' from 'E:\\github项目\\CoreCoder\\corecoder\\checkpoints.py'&gt;.undo">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-integration-review-02/test_finalize_storage_failure_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000269A1616FC0&gt;
+
+    def test_finalize_storage_failure_keeps_original_or_recoverable_change(tmp_path, monkeypatch):
+        from corecoder import checkpoints
+        from corecoder.tools.write import WriteFileTool
+    
+        target = tmp_path / "finalize.txt"
+        target.write_bytes(b"before")
+        replace = Path.replace
+        commits = []
+    
+        def fail_finalize_commit(path, destination):
+            if Path(destination) == checkpoints.CHECKPOINTS_FILE:
+                commits.append(str(path))
+                if len(commits) == 2:
+                    raise OSError("finalize persistence unavailable")
+            return replace(path, destination)
+    
+        with monkeypatch.context() as scoped:
+            scoped.setattr(Path, "replace", fail_finalize_commit)
+            result = WriteFileTool().execute(str(target), "after")
+        assert "error" in result.lower()
+        checkpoints._stack.clear()
+        checkpoints._loaded = False
+        if target.read_bytes() == b"after":
+            assert checkpoints.pending() == 1
+&gt;           assert "Restored" in checkpoints.undo()
+E           AssertionError: assert 'Restored' in 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_finalize_storage_failure_0\\finalize.txt: [Errno 9] Bad file descriptor; retryable'
+E            +  where 'Error: restore target E:\\github项目\\CoreCoder\\designDocument\\validation\\tmp-integration-review-02\\test_finalize_storage_failure_0\\finalize.txt: [Errno 9] Bad file descriptor; retryable' = &lt;function undo at 0x00000269A107CEA0&gt;()
+E            +    where &lt;function undo at 0x00000269A107CEA0&gt; = &lt;module 'corecoder.checkpoints' from 'E:\\github项目\\CoreCoder\\corecoder\\checkpoints.py'&gt;.undo
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:370: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_archive_failure_refuses_and_preserves_original" time="0.009" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_prepared_output_is_idempotent_and_archive_is_exact" time="0.020" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_every_main_round_passes_full_budget_gate" time="0.062" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_missing_reply_remains_unknown_in_memory" time="0.004" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_execution_evidence_keeps_actual_outcome[Permission denied: user refused this call-refused]" time="0.006"><failure message="assert (1 == 1 and 'succeeded' == 'refused'&#10; +  where 1 = len([ExecutionRecord(call_id='operation-18', tool_name='edit_file', target='evidence.py', arguments='{&quot;file_path&quot;: &quot;eviden...tatus='succeeded', result='Permission denied: user refused this call', artifact_path=None, evidence_id='operation-18')])&#10;  &#10;  - refused&#10;  + succeeded)">reply = 'Permission denied: user refused this call', status = 'refused'
+
+    @pytest.mark.parametrize("reply, status", [
+        ("Permission denied: user refused this call", "refused"),
+        ("Blocked by hook: blocked write", "refused"),
+        ("[interrupted]", "cancelled"),
+        ("Error: old_string not found", "failed"),
+        ("Edited successfully", "succeeded"),
+    ])
+    def test_execution_evidence_keeps_actual_outcome(reply, status):
+        messages = [
+            LLMResponse(tool_calls=[ToolCall("operation-18", "edit_file", {
+                "file_path": "evidence.py", "old_string": "before", "new_string": "decision",
+            })]).message,
+            {"role": "tool", "tool_call_id": "operation-18", "content": reply},
+        ]
+        records = ContextManager.extract_records(messages)
+&gt;       assert len(records) == 1 and records[0].status == status
+E       assert (1 == 1 and 'succeeded' == 'refused'
+E        +  where 1 = len([ExecutionRecord(call_id='operation-18', tool_name='edit_file', target='evidence.py', arguments='{"file_path": "eviden...tatus='succeeded', result='Permission denied: user refused this call', artifact_path=None, evidence_id='operation-18')])
+E         
+E         - refused
+E         + succeeded)
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:458: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_execution_evidence_keeps_actual_outcome[Blocked by hook: blocked write-refused]" time="0.005"><failure message="assert (1 == 1 and 'succeeded' == 'refused'&#10; +  where 1 = len([ExecutionRecord(call_id='operation-18', tool_name='edit_file', target='evidence.py', arguments='{&quot;file_path&quot;: &quot;eviden...efore&quot;}', status='succeeded', result='Blocked by hook: blocked write', artifact_path=None, evidence_id='operation-18')])&#10;  &#10;  - refused&#10;  + succeeded)">reply = 'Blocked by hook: blocked write', status = 'refused'
+
+    @pytest.mark.parametrize("reply, status", [
+        ("Permission denied: user refused this call", "refused"),
+        ("Blocked by hook: blocked write", "refused"),
+        ("[interrupted]", "cancelled"),
+        ("Error: old_string not found", "failed"),
+        ("Edited successfully", "succeeded"),
+    ])
+    def test_execution_evidence_keeps_actual_outcome(reply, status):
+        messages = [
+            LLMResponse(tool_calls=[ToolCall("operation-18", "edit_file", {
+                "file_path": "evidence.py", "old_string": "before", "new_string": "decision",
+            })]).message,
+            {"role": "tool", "tool_call_id": "operation-18", "content": reply},
+        ]
+        records = ContextManager.extract_records(messages)
+&gt;       assert len(records) == 1 and records[0].status == status
+E       assert (1 == 1 and 'succeeded' == 'refused'
+E        +  where 1 = len([ExecutionRecord(call_id='operation-18', tool_name='edit_file', target='evidence.py', arguments='{"file_path": "eviden...efore"}', status='succeeded', result='Blocked by hook: blocked write', artifact_path=None, evidence_id='operation-18')])
+E         
+E         - refused
+E         + succeeded)
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:458: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_execution_evidence_keeps_actual_outcome[[interrupted]-cancelled]" time="0.005"><failure message="assert (1 == 1 and 'succeeded' == 'cancelled'&#10; +  where 1 = len([ExecutionRecord(call_id='operation-18', tool_name='edit_file', target='evidence.py', arguments='{&quot;file_path&quot;: &quot;eviden... &quot;old_string&quot;: &quot;before&quot;}', status='succeeded', result='[interrupted]', artifact_path=None, evidence_id='operation-18')])&#10;  &#10;  - cancelled&#10;  + succeeded)">reply = '[interrupted]', status = 'cancelled'
+
+    @pytest.mark.parametrize("reply, status", [
+        ("Permission denied: user refused this call", "refused"),
+        ("Blocked by hook: blocked write", "refused"),
+        ("[interrupted]", "cancelled"),
+        ("Error: old_string not found", "failed"),
+        ("Edited successfully", "succeeded"),
+    ])
+    def test_execution_evidence_keeps_actual_outcome(reply, status):
+        messages = [
+            LLMResponse(tool_calls=[ToolCall("operation-18", "edit_file", {
+                "file_path": "evidence.py", "old_string": "before", "new_string": "decision",
+            })]).message,
+            {"role": "tool", "tool_call_id": "operation-18", "content": reply},
+        ]
+        records = ContextManager.extract_records(messages)
+&gt;       assert len(records) == 1 and records[0].status == status
+E       assert (1 == 1 and 'succeeded' == 'cancelled'
+E        +  where 1 = len([ExecutionRecord(call_id='operation-18', tool_name='edit_file', target='evidence.py', arguments='{"file_path": "eviden... "old_string": "before"}', status='succeeded', result='[interrupted]', artifact_path=None, evidence_id='operation-18')])
+E         
+E         - cancelled
+E         + succeeded)
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:458: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_execution_evidence_keeps_actual_outcome[Error: old_string not found-failed]" time="0.005" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_execution_evidence_keeps_actual_outcome[Edited successfully-succeeded]" time="0.004" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_pure_conversation_history_can_be_compressed_without_losing_latest_user" time="0.015" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_sensitive_tool_fields_are_redacted_from_summary_memory" time="0.004" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_summary_requests_also_fit_the_context_window" time="0.016" /></testsuite></testsuites>

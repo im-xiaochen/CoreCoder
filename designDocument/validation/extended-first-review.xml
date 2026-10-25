@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="13" time="0.932" timestamp="2026-10-08T14:11:39.062793+08:00" hostname="LAPTOP-E93N3PJO"><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_bound_agent_tool_cannot_be_stolen" time="0.097" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_reverse_authority_child_keeps_allowing_parent" time="0.038" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_child_cannot_gain_tools_omitted_by_parent" time="0.007" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_state_fork_isolates_mutable_values_and_cwd" time="0.007" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_write_then_read_batch_observes_new_bytes" time="0.029" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_empty_before_image_is_distinct_from_missing_file" time="0.031" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_archive_failure_refuses_and_preserves_original" time="0.007" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_prepared_output_is_idempotent_and_archive_is_exact" time="0.015" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_every_main_round_passes_full_budget_gate" time="0.038" /><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_missing_reply_remains_unknown_in_memory" time="0.005"><failure message="assert ('unknown' in 'changes:\ntool operation-17 write_file: {&quot;file_path&quot;: &quot;unconfirmed.txt&quot;, &quot;content&quot;: &quot;proposal&quot;}' or 'pending' in 'changes:\ntool operation-17 write_file: {&quot;file_path&quot;: &quot;unconfirmed.txt&quot;, &quot;content&quot;: &quot;proposal&quot;}')&#10; +  where 'changes:\ntool operation-17 write_file: {&quot;file_path&quot;: &quot;unconfirmed.txt&quot;, &quot;content&quot;: &quot;proposal&quot;}' = &lt;built-in method lower of str object at 0x000001C1BB697E10&gt;()&#10; +    where &lt;built-in method lower of str object at 0x000001C1BB697E10&gt; = 'CHANGES:\ntool operation-17 write_file: {&quot;file_path&quot;: &quot;unconfirmed.txt&quot;, &quot;content&quot;: &quot;proposal&quot;}'.lower&#10; +  and   'changes:\ntool operation-17 write_file: {&quot;file_path&quot;: &quot;unconfirmed.txt&quot;, &quot;content&quot;: &quot;proposal&quot;}' = &lt;built-in method lower of str object at 0x000001C1BB697E10&gt;()&#10; +    where &lt;built-in method lower of str object at 0x000001C1BB697E10&gt; = 'CHANGES:\ntool operation-17 write_file: {&quot;file_path&quot;: &quot;unconfirmed.txt&quot;, &quot;content&quot;: &quot;proposal&quot;}'.lower">def test_missing_reply_remains_unknown_in_memory():
+        messages = [LLMResponse(tool_calls=[ToolCall("operation-17", "write_file", {
+            "file_path": "unconfirmed.txt", "content": "proposal",
+        })]).message]
+        summary = ContextManager()._get_summary(messages, None)
+        assert "unconfirmed.txt" in summary
+&gt;       assert "unknown" in summary.lower() or "pending" in summary.lower()
+E       assert ('unknown' in 'changes:\ntool operation-17 write_file: {"file_path": "unconfirmed.txt", "content": "proposal"}' or 'pending' in 'changes:\ntool operation-17 write_file: {"file_path": "unconfirmed.txt", "content": "proposal"}')
+E        +  where 'changes:\ntool operation-17 write_file: {"file_path": "unconfirmed.txt", "content": "proposal"}' = &lt;built-in method lower of str object at 0x000001C1BB697E10&gt;()
+E        +    where &lt;built-in method lower of str object at 0x000001C1BB697E10&gt; = 'CHANGES:\ntool operation-17 write_file: {"file_path": "unconfirmed.txt", "content": "proposal"}'.lower
+E        +  and   'changes:\ntool operation-17 write_file: {"file_path": "unconfirmed.txt", "content": "proposal"}' = &lt;built-in method lower of str object at 0x000001C1BB697E10&gt;()
+E        +    where &lt;built-in method lower of str object at 0x000001C1BB697E10&gt; = 'CHANGES:\ntool operation-17 write_file: {"file_path": "unconfirmed.txt", "content": "proposal"}'.lower
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:159: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_pure_conversation_history_can_be_compressed_without_losing_latest_user" time="0.019"><failure message="AssertionError: assert (False)&#10; +  where False = CompressionResult(messages=[{'role': 'user', 'content': 'Inspect component 0'}, {'role': 'assistant', 'content': 'Obse...e, budget_ok=False, input_tokens=27778, output_reserve=128, limit=4096, artifacts=[], reason='context_budget_exceeded').budget_ok">tmp_path = WindowsPath('E:/github项目/CoreCoder/designDocument/validation/tmp-extended-review-first/test_pure_conversation_history0')
+
+    def test_pure_conversation_history_can_be_compressed_without_losing_latest_user(tmp_path):
+        latest = "最新约束：兼容现有接口，并继续运行集成测试。"
+        messages = []
+        for i in range(30):
+            messages.extend([
+                {"role": "user", "content": f"Inspect component {i}"},
+                {"role": "assistant", "content": f"Observation {i}: " + "repeated background " * 150},
+            ])
+        messages.append({"role": "user", "content": latest})
+        before = copy.deepcopy(messages)
+        result = ContextManager(4096).prepare_request(
+            messages, system="rules", tools=[], output_reserve=128, artifact_dir=tmp_path / "artifacts",
+        )
+&gt;       assert result.budget_ok and result.changed
+E       AssertionError: assert (False)
+E        +  where False = CompressionResult(messages=[{'role': 'user', 'content': 'Inspect component 0'}, {'role': 'assistant', 'content': 'Obse...e, budget_ok=False, input_tokens=27778, output_reserve=128, limit=4096, artifacts=[], reason='context_budget_exceeded').budget_ok
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:175: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_sensitive_tool_fields_are_redacted_from_summary_memory" time="0.007"><failure message="assert ('fake-secret...e-acceptance' not in '[tool_call ...: &quot;inspect&quot;}'&#10;  &#10;  'fake-secret-for-offline-acceptance' is contained here:&#10;    pi_key&quot;: &quot;fake-secret-for-offline-acceptance&quot;}, &quot;operation&quot;: &quot;inspect&quot;})">def test_sensitive_tool_fields_are_redacted_from_summary_memory():
+        secret = "fake-secret-for-offline-acceptance"
+        message = LLMResponse(tool_calls=[ToolCall("remote17", "mcp__remote", {
+            "path": "keep-this-path.py", "credentials": {"api_key": secret}, "operation": "inspect",
+        })]).message
+        flat = ContextManager._flatten([message])
+        summary = ContextManager()._get_summary([message], None)
+&gt;       assert secret not in flat and secret not in summary
+E       assert ('fake-secret...e-acceptance' not in '[tool_call ...: "inspect"}'
+E         
+E         'fake-secret-for-offline-acceptance' is contained here:
+E           pi_key": "fake-secret-for-offline-acceptance"}, "operation": "inspect"})
+
+designDocument\tests\test_acceptance_r01_r06_extended.py:188: AssertionError</failure></testcase><testcase classname="tests.test_acceptance_r01_r06_extended" name="test_summary_requests_also_fit_the_context_window" time="0.007" /></testsuite></testsuites>

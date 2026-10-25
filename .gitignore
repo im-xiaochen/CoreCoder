@@ -15,3 +15,10 @@ venv/
 .DS_Store
 .pytest_cache/
 .tmp/
+.corecoder-artifacts/
+designDocument/validation/tmp*/
+designDocument/validation/live_2026_10_11/**/pytest-tmp*/
+corecoder-live-*/
+corecoder-summary-*/
+.pytest-web-review*
+.pytest-tmp*/

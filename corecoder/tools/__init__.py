@@ -9,14 +9,18 @@ from .read import ReadFileTool
 from .todo import TodoWriteTool
 from .write import WriteFileTool
 
-ALL_TOOLS = [
-    BashTool(),
-    ReadFileTool(),
-    WriteFileTool(),
-    EditFileTool(),
-    GlobTool(),
-    GrepTool(),
-    TodoWriteTool(),
-    AgentTool(),
-]
+
+def create_tools(state=None):
+    """Construct a fresh built-in tool set owned by one session."""
+    return [
+        BashTool(state=state), ReadFileTool(state=state),
+        WriteFileTool(state=state), EditFileTool(state=state),
+        GlobTool(state=state), GrepTool(state=state),
+        TodoWriteTool(state=state), AgentTool(),
+    ]
+
+
+# Compatibility export.  Production Agents call create_tools and never reuse
+# this list; older embedders may still import it for schemas/introspection.
+ALL_TOOLS = create_tools()
 

@@ -181,7 +181,10 @@ def test_ctrl_c_backfills_every_unanswered_tool_call(tmp_path):
     with pytest.raises(KeyboardInterrupt):
         agent.chat("go")
     tool_results = [m for m in agent.messages if m.get("role") == "tool"]
-    assert [(m["tool_call_id"], m["content"]) for m in tool_results] == [("c1", "[interrupted]")]
+    assert [m["tool_call_id"] for m in tool_results] == ["c1"]
+    # R07: execution was entered, so completion cannot be claimed on Ctrl+C.
+    assert "unknown" in tool_results[0]["content"]
+    assert agent.state.execution_records[-1]["status"] == "unknown"
 
 
 def test_ctrl_c_in_a_parallel_batch_backfills_the_whole_batch(tmp_path):
@@ -203,6 +206,7 @@ def test_ctrl_c_in_a_parallel_batch_backfills_the_whole_batch(tmp_path):
     answered = {m.get("tool_call_id") for m in agent.messages if m.get("role") == "tool"}
     assert answered == {"c1", "c2"}
     assert any(
-        m.get("tool_call_id") == "c2" and m.get("content") == "[interrupted]"
+        m.get("tool_call_id") == "c2" and "unknown" in m.get("content", "")
         for m in agent.messages
     )
+    assert {r["call_id"]: r["status"] for r in agent.state.execution_records} == {"c1": "succeeded", "c2": "unknown"}

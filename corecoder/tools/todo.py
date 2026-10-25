@@ -14,6 +14,7 @@ shared list is what lets the whole pattern fit in a file this small.
 
 from typing import ClassVar
 
+from ..state import SessionState
 from .base import Tool
 
 _VALID_STATUS = ("pending", "in_progress", "done")
@@ -53,8 +54,19 @@ class TodoWriteTool(Tool):
         "required": ["tasks"],
     }
 
-    def __init__(self):
-        self._tasks: list[dict] = []
+    def __init__(self, state: SessionState | None = None):
+        self.state = state or SessionState()
+
+    @property
+    def _tasks(self):
+        return self.state.todos
+
+    @_tasks.setter
+    def _tasks(self, value):
+        self.state.todos = value
+
+    def clone_for_state(self, state: SessionState):
+        return type(self)(state=state)
 
     def execute(self, tasks: list) -> str:
         if not isinstance(tasks, list):

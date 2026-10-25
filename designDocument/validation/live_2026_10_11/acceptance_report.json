@@ -1,0 +1,178 @@
+{
+  "date": "2026-10-11",
+  "config": {
+    "provider": "openai",
+    "model": "deepseek-flash",
+    "endpoint": "https://api.deepseek.com"
+  },
+  "workspace": "<temporary-redacted>",
+  "offline": [
+    "R01 state isolation",
+    "R03 undo conflict/exact restore",
+    "R07 plan refusal",
+    "R05 strict budget gates",
+    "R06 evidence summary facts/constraints/failures"
+  ],
+  "live_agent": {
+    "status": "completed",
+    "rounds": 5,
+    "text": "I'll start by spawning the read-only child sub-agent.The child returned. Now reading `input.txt` myself.Now creating `output.txt`.Now replacing the marker.LIVE_AGENT_DONE",
+    "tool_outcomes": [
+      {
+        "tool": "agent",
+        "status": "succeeded"
+      },
+      {
+        "tool": "read_file",
+        "status": "succeeded"
+      },
+      {
+        "tool": "write_file",
+        "status": "succeeded"
+      },
+      {
+        "tool": "edit_file",
+        "status": "succeeded"
+      }
+    ],
+    "summary": "CONSTRAINTS\n- Preserve `LIVE_SUMMARY_CONSTRAINT`.\n- Verify the final output.\n\nCHANGES\n- `live-summary-ok` (`write_file`, succeeded): wrote `live-summary.txt` with content `\"KEEP\"`.\n\nFAILURES\n- `live-summary-fail` (`edit_file`, failed): `Error: missing-live-summary.txt not found`.\n\nREMAINING/UNVERIFIED\n- Verify the final output; no successful verification tool call is shown.\n- Preserving `LIVE_SUMMARY_CONSTRAINT` is unverified.\n- The failed edit to `missing-live-summary.txt` remains unresolved; no successful edit is recorded.",
+    "tool_errors": [],
+    "message_chain_valid": true,
+    "usage": {
+      "requests": 7,
+      "prompt_tokens": 15563,
+      "completion_tokens": 597,
+      "unknown_requests": 7,
+      "missing_usage_requests": 0,
+      "model": "deepseek-flash",
+      "provider": "openai",
+      "endpoint": "https://api.deepseek.com",
+      "summary_requests": 0,
+      "usage_known": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    "external_conflict": "Conflict: E:\\github项目\\CoreCoder\\designDocument\\validation\\live_2026_10_11\\corecoder-live-xtcj0hvf\\output.txt (current hash=6501513cd9c8ad0388495eb615c6de3f036fbcec19aa97ddce5edae68dc549c0, expected hash=0b1ed0d02c8e2fa09375f18783558ad4e85e2e4b906ace2c45af1a543d28d019)"
+  },
+  "live_cli": {
+    "status": "completed",
+    "rounds": 1,
+    "text": "LIVE_CLI_DONE",
+    "usage": {
+      "known_cost": "0",
+      "unknown_prompt_tokens": 1895,
+      "unknown_completion_tokens": 28,
+      "unknown_requests": 1,
+      "missing_usage_requests": 0,
+      "request_ids": [
+        "c470632da48c462b801c88f600790272"
+      ],
+      "prompt_tokens": 1895,
+      "completion_tokens": 28
+    },
+    "exit_code": 0,
+    "stderr_tail": "The user wants me to reply exactly \"LIVE_CLI_DONE\". I should just do that."
+  },
+  "live_cli_max_rounds": {
+    "status": "max_rounds",
+    "rounds": 1,
+    "text": "I'll start by reading the input file as instructed.",
+    "usage": {
+      "known_cost": "0",
+      "unknown_prompt_tokens": 1923,
+      "unknown_completion_tokens": 50,
+      "unknown_requests": 1,
+      "missing_usage_requests": 0,
+      "request_ids": [
+        "7e52642d8b084a3da84e849fbe63cd8d"
+      ],
+      "prompt_tokens": 1923,
+      "completion_tokens": 50
+    },
+    "exit_code": 2,
+    "tool_errors": [],
+    "stderr_tail": "\n> read_file(file_path='input.txt')\nmax_rounds\n",
+    "fixture_files": [
+      "input.txt"
+    ]
+  },
+  "coverage": {
+    "live": [
+      "OpenAI-compatible DeepSeek streaming Agent/read/write/edit tool calls",
+      "real parent/child Agent path",
+      "real write side effect and checkpoint external conflict",
+      "strict independently captured model summary",
+      "CLI --json completed result and usage",
+      "CLI --json max_rounds=1 boundary"
+    ],
+    "offline": [
+      "R01 child state isolation",
+      "plan mode refusal and side-effect guard",
+      "R03 exact undo restore",
+      "R05 budget gate/R06 summary evidence"
+    ],
+    "not_covered": [
+      "broader summary semantic tasks beyond the fixed evidence set",
+      "third-party MCP server/network",
+      "provider billing price verification",
+      "cross-process crash/power-loss",
+      "symlink permission branch on this Windows host"
+    ]
+  },
+  "result": "PASS",
+  "execution_history": {
+    "offline_preflight_failure": {
+      "api_requests": 0,
+      "cause": "fixture newline assertion; corrected before live call"
+    },
+    "complete_read_write_pass": {
+      "api_requests": 4,
+      "model_requests": 3,
+      "cli_requests": 1,
+      "result": "pass"
+    },
+    "enhanced_edit_child_pass": {
+      "api_requests": 8,
+      "model_requests": 7,
+      "cli_requests": 1,
+      "result": "pass"
+    },
+    "enhanced_live_summary_pass": {
+      "api_requests": 9,
+      "model_requests": 8,
+      "cli_requests": 1,
+      "summary_requests": 1,
+      "result": "pass"
+    },
+    "standalone_live_summary_pass": {
+      "api_requests": 1,
+      "model_requests": 1,
+      "summary_source": "model",
+      "usage_known": true,
+      "result": "pass"
+    },
+    "summary_semantic_fail_before_prompt_fix": {
+      "api_requests": 1,
+      "result": "fail"
+    },
+    "summary_semantic_fix_pass": {
+      "api_requests": 1,
+      "model_requests": 1,
+      "summary_source": "model",
+      "usage_known": true,
+      "result": "pass"
+    },
+    "final_complete_runner": {
+      "api_requests": 9,
+      "result": "PASS"
+    },
+    "total_api_requests_across_runs": 33,
+    "pricing": "unknown; endpoint usage was retained and no price was asserted"
+  }
+}

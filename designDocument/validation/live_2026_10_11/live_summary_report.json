@@ -1,0 +1,12 @@
+{
+  "model": "deepseek-flash",
+  "endpoint": "https://api.deepseek.com",
+  "summary_source": "model",
+  "request_count": 1,
+  "usage_known": [
+    true
+  ],
+  "summary": "CONSTRAINTS\n- Preserve `LIVE_SUMMARY_CONSTRAINT`.\n- Verify the final output.\n\nCHANGES\n- `live-summary-ok` (`write_file`, succeeded): wrote `live-summary.txt` with content `\"KEEP\"`.\n\nFAILURES\n- `live-summary-fail` (`edit_file`, failed): `Error: missing-live-summary.txt not found`.\n\nREMAINING/UNVERIFIED\n- Verify the final output; no successful verification tool call is shown.\n- Preserving `LIVE_SUMMARY_CONSTRAINT` is unverified.\n- The failed edit to `missing-live-summary.txt` remains unresolved; no successful edit is recorded.",
+  "errors": [],
+  "result": "PASS"
+}

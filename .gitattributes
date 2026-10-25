@@ -1,0 +1,5 @@
+# Keep original pytest trace formatting in archived validation evidence.
+designDocument/validation/*.log whitespace=-blank-at-eol
+designDocument/validation/*.xml whitespace=-blank-at-eol
+designDocument/validation/**/*.log whitespace=-blank-at-eol
+designDocument/validation/**/*.xml whitespace=-blank-at-eol

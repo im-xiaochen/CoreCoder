@@ -12,8 +12,8 @@ task, present the plan as a numbered list and stop. Do not execute any of it
 until the user approves."""
 
 
-def system_prompt(tools) -> str:
-    cwd = os.getcwd()
+def system_prompt(tools, state=None) -> str:
+    cwd = getattr(state, "cwd", None) or os.getcwd()
     tool_list = "\n".join(f"- **{t.name}**: {t.description}" for t in tools)
     uname = platform.uname()
 

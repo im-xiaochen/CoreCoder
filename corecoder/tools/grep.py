@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import ClassVar
 
+from ..state import SessionState
 from .base import Tool
 
 # skip these dirs to avoid noise
@@ -35,13 +36,19 @@ class GrepTool(Tool):
         "required": ["pattern"],
     }
 
+    def __init__(self, state: SessionState | None = None):
+        self.state = state or SessionState()
+
+    def clone_for_state(self, state: SessionState):
+        return type(self)(state=state)
+
     def execute(self, pattern: str, path: str = ".", include: str | None = None) -> str:
         try:
             regex = re.compile(pattern)
         except re.error as e:
             return f"Invalid regex: {e}"
 
-        base = Path(path).expanduser().resolve()
+        base = self.state.resolve_path(path)
         if not base.exists():
             return f"Error: {path} not found"
 

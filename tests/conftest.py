@@ -9,6 +9,7 @@ from corecoder.tools import ALL_TOOLS
 @pytest.fixture(autouse=True)
 def _checkpoints_isolated(tmp_path, monkeypatch):
     """Checkpoint persistence must never touch the real ~/.corecoder."""
+    monkeypatch.setenv("CORECODER_DATA_DIR", str(tmp_path / "stores"))
     monkeypatch.setattr(checkpoints, "CHECKPOINTS_FILE", tmp_path / "checkpoints.json")
     checkpoints.clear()
     yield
