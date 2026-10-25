@@ -443,6 +443,9 @@ def _repl(agent: Agent, config: Config):
             except Exception as e:  # noqa: BLE001
                 console.print(f"[red]Error: {e}[/red]")
             continue
+        if user_input == "/mcp" or user_input.startswith("/mcp "):
+            _mcp(user_input[4:].strip())
+            continue
 
         # an unknown /command shouldn't be sent to the model as a prompt
         if user_input.startswith("/"):
@@ -481,6 +484,37 @@ def _repl(agent: Agent, config: Config):
             console.print(f"\n[red]Error: {e}[/red]")
 
 
+def _mcp(arg: str):
+    """The /mcp command: server states, or `reconnect <name>` to revive one."""
+    from . import mcp
+    parts = arg.split()
+    if not parts:
+        if not mcp._live_clients:
+            console.print("[dim]No MCP servers running (configure ~/.corecoder/mcp.json).[/dim]")
+        for client in mcp._live_clients:
+            if client.error is None:
+                console.print(f"  [cyan]{client.name}[/cyan]: alive, {len(client.tools)} tools")
+            else:
+                console.print(
+                    f"  [cyan]{client.name}[/cyan]: [red]dead[/red] ({client.error})"
+                    f", revive with /mcp reconnect {client.name}"
+                )
+        return
+    if len(parts) == 2 and parts[0] == "reconnect":
+        client = next((c for c in mcp._live_clients if c.name == parts[1]), None)
+        if client is None:
+            console.print(f"[red]No MCP server named '{parts[1]}'.[/red]")
+            return
+        try:
+            client.reconnect()
+        except (mcp.MCPError, OSError) as e:
+            console.print(f"[red]Reconnect failed:[/red] {e}")
+        else:
+            console.print(f"[green]Reconnected:[/green] [cyan]{client.name}[/cyan], {len(client.tools)} tools")
+        return
+    console.print("[yellow]Usage: /mcp [reconnect <name>][/yellow]")
+
+
 def _show_help():
     console.print(
         Panel(
@@ -490,6 +524,7 @@ def _show_help():
             "  /model         Show current model\n"
             "  /model <name>  Switch model mid-conversation\n"
             "  /tokens        Show token usage\n"
+            "  /mcp           Show MCP states; /mcp reconnect <name> to reconnect\n"
             "  /compact       Compress conversation context\n"
             "  /diff          Show files modified this session\n"
             "  /undo          Revert the most recent file change\n"

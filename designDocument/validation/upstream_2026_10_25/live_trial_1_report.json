@@ -1,0 +1,42 @@
+{
+  "result": "FAIL",
+  "model": "deepseek-flash",
+  "checks": {
+    "upstream_live_file_read_smoke": "PASS"
+  },
+  "requests": [
+    {
+      "request_id": "461106d4931b42e88a6b632033bccc8b",
+      "attempt_id": "461106d4931b42e88a6b632033bccc8b:1",
+      "usage_known": true,
+      "prompt_tokens": 1931,
+      "completion_tokens": 74,
+      "rate_known": false
+    },
+    {
+      "request_id": "269f7dc4b2d647669f54f0569241a93d",
+      "attempt_id": "269f7dc4b2d647669f54f0569241a93d:1",
+      "usage_known": true,
+      "prompt_tokens": 2031,
+      "completion_tokens": 16,
+      "rate_known": false
+    },
+    {
+      "request_id": "e07d463ae86a45e6bce161610e70726d",
+      "attempt_id": "e07d463ae86a45e6bce161610e70726d:1",
+      "usage_known": true,
+      "prompt_tokens": 584,
+      "completion_tokens": 51,
+      "rate_known": false
+    },
+    {
+      "request_id": "afc0c3fa73b443cdb8881a624bad449a",
+      "attempt_id": "afc0c3fa73b443cdb8881a624bad449a:1",
+      "usage_known": true,
+      "prompt_tokens": 658,
+      "completion_tokens": 17,
+      "rate_known": false
+    }
+  ],
+  "failure_type": "AssertionError"
+}

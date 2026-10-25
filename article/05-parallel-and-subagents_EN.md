@@ -73,7 +73,7 @@ I pull this passage out on its own because it's a particularly good teaching poi
 
 ## Sub-agents: spawning a clone of yourself
 
-The `agent` tool (`corecoder/tools/agent.py`, 58 lines) solves a different problem. Some subtasks are heavy, say "go over this unfamiliar codebase and tell me how authentication is implemented." If the main agent does this itself, it has to read a pile of files and run a bunch of searches, and all that intermediate process piles into the main conversation's window; by the time it's figured things out, the window is nearly stuffed with exploration garbage and the real task has no room left.
+The `agent` tool (`corecoder/tools/agent.py`, 98 lines) solves a different problem. Some subtasks are heavy, say "go over this unfamiliar codebase and tell me how authentication is implemented." If the main agent does this itself, it has to read a pile of files and run a bunch of searches, and all that intermediate process piles into the main conversation's window; by the time it's figured things out, the window is nearly stuffed with exploration garbage and the real task has no room left.
 
 The sub-agent's idea is: dispatch a clone with its own independent context to do this heavy work, let it churn in its own window, and hand back only a distilled conclusion when done. The main agent's window stays clean throughout, with just one extra line, "authentication is implemented this way."
 
@@ -129,7 +129,7 @@ Remember piece one stressing that `_tool_by_name` is instance-level? Precisely b
 
 Claude Code's sub-agent system (its AgentTool is over a thousand lines in public teardowns) is far richer: sub-agents have several run modes, including running in an independent git worktree and running asynchronously in the background, plus several built-in preset agent types, each with its own system prompt and tool set. CoreCoder converges all this into the most plain one: synchronous spawn, run and return, no recursion.
 
-But the core motivation, "use a sub-agent with independent context to isolate heavy work and protect the main window," is the same in both. Read CoreCoder's 58 lines and you've grasped the most essential point of multi-agent collaboration: it's a context-management means first, and a task-decomposition means second. Many people think a sub-agent is for "doing more work in parallel," but its greatest value is actually "keeping the noise of other work out of the main conversation."
+But the core motivation, "use a sub-agent with independent context to isolate heavy work and protect the main window," is the same in both. Read CoreCoder's 53 lines and you've grasped the most essential point of multi-agent collaboration: it's a context-management means first, and a task-decomposition means second. Many people think a sub-agent is for "doing more work in parallel," but its greatest value is actually "keeping the noise of other work out of the main conversation."
 
 ## What this piece leaves you with
 
