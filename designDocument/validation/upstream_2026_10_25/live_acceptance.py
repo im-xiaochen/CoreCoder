@@ -13,7 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from corecoder import Agent, Config, LLM
+from corecoder import LLM, Agent, Config
 from corecoder.mcp import MCPClient, MCPError
 from corecoder.permissions import Permission
 from tests.test_live_smoke import test_agent_reads_a_file_and_answers
@@ -62,13 +62,15 @@ def main():
             agent = Agent(llm, tools=[echo], max_rounds=4, permission=Permission(allow_all=True))
 
             def turn(marker):
+                start = len(agent.state.execution_records)
                 result = agent.chat_result(
                     f"Call mcp__live__echo with text {marker}, then return its exact text result. "
                     "You must actually use the tool.")
                 assert result.status == "completed" and marker in result.text
-                messages = [m for m in agent.messages if m.get("role") == "tool"]
-                assert any(m.get("content") == f"echo: {marker}" and m.get("status") == "succeeded"
-                           for m in messages)
+                records = agent.state.execution_records[start:]
+                assert not result.tool_errors
+                assert any(record.get("result") == f"echo: {marker}" and record.get("status") == "succeeded"
+                           and record.get("tool_name") == "mcp__live__echo" for record in records)
 
             turn("BEFORE_RECONNECT_20261025")
             previous = llm.usage_ledger
@@ -91,7 +93,7 @@ def main():
             completed = subprocess.run(
                 [sys.executable, "-X", "utf8", "-m", "corecoder", "--json", "--max-rounds", "2",
                  "-p", "Reply with UPSTREAM_JSON_OK. Do not call any tools."],
-                cwd=ROOT, text=True, encoding="utf-8", capture_output=True, timeout=180)
+                cwd=ROOT, text=True, encoding="utf-8", capture_output=True, timeout=180, check=False)
             assert completed.returncode == 0, "Live JSON command returned a failure code"
             payload = json.loads(completed.stdout)
             assert payload["status"] == "completed" and "UPSTREAM_JSON_OK" in payload["text"]
@@ -99,7 +101,7 @@ def main():
             report["cli_usage"] = payload["usage"]
             assert observed and all(item["usage_known"] for item in observed)
             report["result"] = "PASS"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         # Exception strings from SDKs may contain credentials or response bodies.
         report["failure_type"] = type(exc).__name__
     finally:

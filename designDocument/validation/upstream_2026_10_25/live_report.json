@@ -1,0 +1,72 @@
+{
+  "result": "PASS",
+  "model": "deepseek-flash",
+  "checks": {
+    "upstream_live_file_read_smoke": "PASS",
+    "real_model_mcp_before_and_after_reconnect": "PASS",
+    "historical_usage_entries_unchanged": "PASS",
+    "real_cli_stdout_single_json_object": "PASS"
+  },
+  "requests": [
+    {
+      "request_id": "b535c40f86504f7da55a7c5cde69df53",
+      "attempt_id": "b535c40f86504f7da55a7c5cde69df53:1",
+      "usage_known": true,
+      "prompt_tokens": 1930,
+      "completion_tokens": 73,
+      "rate_known": false
+    },
+    {
+      "request_id": "4805ae29915040a19fafb2a0f1f76044",
+      "attempt_id": "4805ae29915040a19fafb2a0f1f76044:1",
+      "usage_known": true,
+      "prompt_tokens": 2029,
+      "completion_tokens": 16,
+      "rate_known": false
+    },
+    {
+      "request_id": "552794a08c7c49c386d7c3f8f3aa8170",
+      "attempt_id": "552794a08c7c49c386d7c3f8f3aa8170:1",
+      "usage_known": true,
+      "prompt_tokens": 584,
+      "completion_tokens": 83,
+      "rate_known": false
+    },
+    {
+      "request_id": "20d7767ff7454f9aa825a4f56766466b",
+      "attempt_id": "20d7767ff7454f9aa825a4f56766466b:1",
+      "usage_known": true,
+      "prompt_tokens": 690,
+      "completion_tokens": 22,
+      "rate_known": false
+    },
+    {
+      "request_id": "b3fc587f94ae4c19bb87a60d0daedf17",
+      "attempt_id": "b3fc587f94ae4c19bb87a60d0daedf17:1",
+      "usage_known": true,
+      "prompt_tokens": 717,
+      "completion_tokens": 51,
+      "rate_known": false
+    },
+    {
+      "request_id": "2724304177ed4fddabb1d416787e7f4d",
+      "attempt_id": "2724304177ed4fddabb1d416787e7f4d:1",
+      "usage_known": true,
+      "prompt_tokens": 791,
+      "completion_tokens": 22,
+      "rate_known": false
+    }
+  ],
+  "cli_usage": {
+    "known_cost": "0",
+    "unknown_prompt_tokens": 1885,
+    "unknown_completion_tokens": 7,
+    "unknown_requests": 1,
+    "missing_usage_requests": 0,
+    "request_ids": [
+      "ac3b11865d6342379ae8ce4429375c28"
+    ],
+    "prompt_tokens": 1885,
+    "completion_tokens": 7
+  }
+}

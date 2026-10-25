@@ -22,9 +22,13 @@ exist; if you already have servers, add `"fs"` next to them):
 ```
 
 Requires Node.js on PATH (`npx`). The first launch downloads the server
-package, which can outlast the 15-second handshake budget; if `/mcp` shows
-the server as dead on first run, `/mcp reconnect fs` picks it up once the
-npx cache is warm, and every later start is fast.
+package, which can outlast the 15-second handshake budget. A server that
+fails initial startup is skipped and is not registered in `/mcp`, so
+`/mcp reconnect fs` cannot recover that initial failure. Run
+`npx -y @modelcontextprotocol/server-filesystem .` separately, let the package
+finish downloading, stop that server with Ctrl+C, then restart CoreCoder.
+Once a server has successfully registered in the current session, `/mcp`
+shows later failures as dead and `/mcp reconnect fs` starts it again.
 
 The `"."` argument is resolved by the server itself, so launch CoreCoder
 from the directory you want exposed. To expose a fixed tree instead, put an
@@ -33,7 +37,7 @@ the server, not by CoreCoder.
 
 ## What you should see
 
-`/mcp` lists `fs` as connected with its tool count, and asking the agent to
+`/mcp` lists `fs` as alive with its tool count, and asking the agent to
 "show me what's in this directory" now routes through `mcp__fs__list_directory`
 with the usual consent prompt, since MCP tools never join the read-only set.
 
