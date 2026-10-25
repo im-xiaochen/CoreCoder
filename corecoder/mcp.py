@@ -9,6 +9,7 @@ stdin/stdout. Startup handshakes (`initialize`), pulls `tools/list`, and every
 remote tool joins the agent as `mcp__<server>__<tool>`, so consent, hooks and
 the main loop treat them exactly like the built-ins. A server that hangs or
 dies fails that one call as an ordinary error string; it never kills the loop.
+The REPL's /mcp shows each server's state and reconnects a dead one by hand.
 """
 
 import atexit
@@ -49,21 +50,36 @@ class MCPClient:
     def __init__(self, name: str, command: str, args: list = (), env: dict | None = None):
         self.name = name
         self.call_timeout = CALL_TIMEOUT
-        self._proc = subprocess.Popen(
-            [command, *args],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            env={**os.environ, **(env or {})},  # servers inherit the user env, config overrides
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,  # line buffered: the transport is newline-delimited JSON
-        )
+        self._command = command
+        self._args = list(args)
+        self._env = dict(env) if env is not None else None
         self._next_id = 0
         self._dead: MCPError | None = None
         self._responses: dict[int, dict] = {}
         self._cond = threading.Condition()
         self._write_lock = threading.Lock()
-        threading.Thread(target=self._read_loop, daemon=True).start()
+        self._lifecycle_lock = threading.RLock()
+        self._ready = False
+        self._start()
+
+    def _start(self):
+        """Spawn the server and run the startup handshake."""
+        proc = subprocess.Popen(
+            [self._command, *self._args],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            env={**os.environ, **(self._env or {})},  # servers inherit the user env, config overrides
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,  # line buffered: the transport is newline-delimited JSON
+        )
+        with self._cond:
+            self._proc = proc
+            self._ready = False
+            self._dead = None  # a fresh process starts clean
+            self._responses.clear()
+            self._cond.notify_all()
+        threading.Thread(target=self._read_loop, args=(proc,), daemon=True).start()
         try:
             deadline = time.monotonic() + INIT_TIMEOUT
             initialized = self._request(
@@ -121,14 +137,47 @@ class MCPClient:
                     seen_cursors.add(cursor)
                 else:
                     raise MCPError("pagination page limit exceeded")
-            self.tools = [MCPTool(self, t) for t in candidate]
+            tools = [MCPTool(self, t) for t in candidate]
+            with self._cond:
+                if hasattr(self, "tools"):
+                    signature = lambda items: {t.name: (t.description, t.parameters) for t in items}
+                    if signature(tools) != signature(self.tools):
+                        raise MCPError("MCP tools changed during reconnect; restart the session to register the new schemas")
+                if self._dead is not None:
+                    raise self._dead
+                self.tools = tools
+                self._ready = True
         except BaseException:
             self.close()  # a half-started server must not leak
             raise
 
+    @property
+    def error(self) -> MCPError | None:
+        """What killed the server, or None while it is healthy."""
+        with self._cond:
+            return self._dead
+
+    def reconnect(self):
+        """Start a fresh process for a dead or hung server and redo the
+        handshake. The mcp__ tools the agent already holds route through this
+        client, so they work again as soon as the handshake lands."""
+        with self._lifecycle_lock:
+            self.close()
+            try:
+                self._start()
+            except (MCPError, OSError) as e:
+                with self._cond:
+                    self._dead = e if isinstance(e, MCPError) else MCPError(str(e))
+                    self._cond.notify_all()
+                raise
+
     def call_tool(self, tool_name: str, arguments: dict) -> str:
         """Run one remote tool and return its text content."""
-        result = self._request("tools/call", {"name": tool_name, "arguments": arguments}, self.call_timeout)
+        with self._cond:
+            if not self._ready:
+                raise self._dead or MCPError("MCP server is reconnecting")
+            proc = self._proc
+        result = self._request("tools/call", {"name": tool_name, "arguments": arguments}, self.call_timeout, proc)
         text = "\n".join(part.get("text", "") for part in result.get("content", []) if part.get("type") == "text")
         if result.get("isError"):
             raise MCPError(text or f"{tool_name} reported an error")
@@ -136,18 +185,25 @@ class MCPClient:
 
     def close(self):
         """Shut the server down. Safe to call twice."""
-        if self._proc.poll() is not None:
-            return
-        try:
-            self._proc.stdin.close()
-        except OSError:
-            pass
-        self._proc.terminate()
-        try:
-            self._proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            self._proc.kill()
-            self._proc.wait(timeout=5)
+        with self._lifecycle_lock:
+            with self._cond:
+                proc = self._proc
+                self._ready = False
+                self._dead = self._dead or MCPError(f"MCP server {self.name!r} closed")
+                self._cond.notify_all()
+            if proc.poll() is not None:
+                return
+            # Terminate before closing stdin: an in-flight writer must not block shutdown.
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+            try:
+                proc.stdin.close()
+            except (OSError, ValueError):
+                pass
 
     def _validate_initialize(self, result):
         if not isinstance(result, dict):
@@ -177,18 +233,23 @@ class MCPClient:
         except MCPError:
             pass  # a notification has no reply to lose; the next request meets the dead server
 
-    def _request(self, method: str, params: dict, timeout: float) -> dict:
+    def _request(self, method: str, params: dict, timeout: float, proc=None) -> dict:
         if timeout <= 0:
             raise MCPError(f"MCP discovery deadline exceeded before {method}")
         with self._cond:
+            proc = self._proc if proc is None else proc
+            if proc is not self._proc:
+                raise MCPError("MCP connection changed before request")
             if self._dead is not None:
                 raise self._dead
             self._next_id += 1
             req_id = self._next_id
-        self._write({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params})
+        self._write({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}, proc)
         deadline = time.monotonic() + timeout
         with self._cond:
             while req_id not in self._responses:
+                if proc is not self._proc:
+                    raise MCPError("MCP connection changed while awaiting response")
                 if self._dead is not None:
                     raise self._dead
                 left = deadline - time.monotonic()
@@ -200,17 +261,23 @@ class MCPClient:
             raise MCPError(f"MCP server {self.name!r} rejected {method}: {msg['error'].get('message', msg['error'])}")
         return msg.get("result", {})
 
-    def _write(self, msg: dict):
+    def _write(self, msg: dict, proc=None):
         try:
             with self._write_lock:
-                self._proc.stdin.write(json.dumps(msg) + "\n")
-                self._proc.stdin.flush()
-        except OSError as e:
+                with self._cond:
+                    proc = self._proc if proc is None else proc
+                    if proc is not self._proc:
+                        raise MCPError("MCP connection changed before write")
+                    if self._dead is not None:
+                        raise self._dead
+                proc.stdin.write(json.dumps(msg) + "\n")
+                proc.stdin.flush()
+        except (OSError, ValueError) as e:
             raise MCPError(f"MCP server {self.name!r} is not writable: {e}") from e
 
-    def _read_loop(self):
+    def _read_loop(self, proc: subprocess.Popen):
         try:
-            for line in self._proc.stdout:
+            for line in proc.stdout:
                 try:
                     msg = json.loads(line)
                 except json.JSONDecodeError:
@@ -225,13 +292,16 @@ class MCPClient:
                     log.warning("MCP server %r sent an invalid response id, skipped", self.name)
                     continue
                 with self._cond:
+                    if proc is not self._proc:
+                        continue
                     self._responses[msg["id"]] = msg
                     self._cond.notify_all()
         except (OSError, ValueError):
             pass
         with self._cond:
-            # stdout closing means the server is gone for good
-            if self._dead is None:
+            # stdout closing means the server is gone for good; a reader left
+            # over from before a reconnect must not mark the new process dead
+            if proc is self._proc and self._dead is None:
                 self._dead = MCPError(f"MCP server {self.name!r} exited")
             self._cond.notify_all()
 

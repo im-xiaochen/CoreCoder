@@ -14,9 +14,11 @@ venv/
 .corecoder_history
 .DS_Store
 .pytest_cache/
+pytest-cache-files-*/
 .tmp/
 .corecoder-artifacts/
 designDocument/validation/tmp*/
+designDocument/validation/tmp*.xml
 designDocument/validation/live_2026_10_11/**/pytest-tmp*/
 corecoder-live-*/
 corecoder-summary-*/

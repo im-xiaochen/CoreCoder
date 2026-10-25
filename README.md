@@ -2,7 +2,7 @@
 
 # CoreCoder
 
-**The nanoGPT of coding agents. A 2.2k-line engine inside 4,702 readable lines of pure Python: understand how a coding agent actually works, then fork your own.**
+**The nanoGPT of coding agents. A 2.2k-line engine inside 4,855 readable lines of pure Python: understand how a coding agent actually works, then fork your own.**
 
 *learn from it · fork it · ship something better*
 
@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
-[![engine](https://img.shields.io/badge/engine-2190_LoC-blue)](article/00-index_EN.md)
+[![engine](https://img.shields.io/badge/engine-2224_LoC-blue)](article/00-index_EN.md)
 [![essays](https://img.shields.io/badge/source--reading-8_bilingual-orange)](article/00-index_EN.md)
 
 </div>
@@ -25,7 +25,7 @@
 
 | | CoreCoder | Claude Code | aider | nanoGPT |
 |---|---|---|---|---|
-| Lines of code | ~1,794 engine / 3,754 total | hundreds of thousands (closed) | tens of thousands of Python | ~600 (two files) |
+| Lines of code | ~2,224 engine / 4,855 total | hundreds of thousands (closed) | tens of thousands of Python | ~600 (two files) |
 | Time to read it all | one afternoon | can't (closed) | a few days of slogging | one afternoon |
 | Breakpoint, change, rerun? | yes, every line | no | yes, but there's a lot | yes |
 | What it's for | understand one, then fork your own | production coding assistant | terminal pair-programming | minimal GPT for teaching |
@@ -36,9 +36,9 @@ The nanoGPT column is there as a reference point: minimal, readable, but it teac
 
 I've always felt coding agents get talked about as if they were arcane. Strip a tool like Claude Code or Cursor all the way down and the core is a `while` loop wrapped around a large model, plus seven or eight tools that let it actually do things. The hard part was never the loop; it's everything the loop has to cope with once it meets the real world. CoreCoder is the minimal version that writes that core out honestly.
 
-The engine (loop, model interface, context, tools, sessions) is 2,190 lines once you drop blank lines and comments. Counting the outer CLI, config and packaging too, the whole package is 29 files: 4,712 physical lines, 4,000 net. The growth since the original 1,161-line snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation and usage accounting.
+The engine (loop, model interface, context, tools, sessions) is 2,224 lines once you drop blank lines and comments. Counting the outer CLI, config and packaging too, the whole package is 29 files: 4,855 physical lines, 4,132 net. The growth since the original 1,161-line snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation and usage accounting.
 
-And it really runs: reads and writes files, executes shell, spawns sub-agents, budgets requests and archives context, and tells you the tokens and dollars a run burned whenever you ask. Anything that would mutate your disk or run a command stops for your consent first. 214 tests, all green. But the point of it running isn't to become your daily driver. It runs so the walkthrough can't lie: a reference that shows how an agent works has to actually work.
+And it really runs: reads and writes files, executes shell, spawns sub-agents, budgets requests and archives context, and tells you the tokens and dollars a run burned whenever you ask. Anything that would mutate your disk or run a command stops for your consent first. The regression suite checks these behaviors. But the point of it running isn't to become your daily driver. It runs so the walkthrough can't lie: a reference that shows how an agent works has to actually work.
 
 The code came out of a public teardown: open analyses have already exposed a lot of the load-bearing architecture inside production agents like Claude Code. I took the most essential layer and rewrote it honestly, in as little code as I could. So reading CoreCoder is roughly like reading a runnable, annotated take on how that kind of agent works, except it's only a minimal reimplementation, sitting right there on your machine for you to take apart and change.
 
@@ -139,7 +139,7 @@ def chat(self, user_input):
     return "(hit the round limit)"
 ```
 
-That's the whole thing. The core skeleton is about twenty lines; counting parallel execution and the bookkeeping after a Ctrl+C interrupt, maybe forty. Almost everything else in CoreCoder's thousand-odd lines is there to clean up the mess the loop runs into once it meets the real world. `llm.py` ends up the biggest file in the project, not because calling a model is hard, but because a streamed response splinters each tool call's arguments into fragments you have to restitch in order, a provider will hand you half a JSON object or a null `usage` field, and 429s, timeouts, dropped connections and 5xx all need backoff-and-retry while the other 4xx should just raise. A stream can also die after it has already started, so the retry wraps the whole request, not just the connect. That unglamorous grunt work, not the loop, is where the real engineering of taking an agent from demo to delivery actually lives; the third essay follows it down to the line.
+That's the whole thing. The core skeleton is about twenty lines; counting parallel execution and the bookkeeping after a Ctrl+C interrupt, maybe forty. Almost everything else in CoreCoder's thousand-odd lines is there to clean up the mess the loop runs into once it meets the real world. `llm.py` ends up the biggest file in the engine, not because calling a model is hard, but because a streamed response splinters each tool call's arguments into fragments you have to restitch in order, a provider will hand you half a JSON object or a null `usage` field, and 429s, timeouts, dropped connections and 5xx all need backoff-and-retry while the other 4xx should just raise. A stream can also die after it has already started, so the retry wraps the whole request, not just the connect. That unglamorous grunt work, not the loop, is where the real engineering of taking an agent from demo to delivery actually lives; the third essay follows it down to the line.
 
 Three decisions are worth a closer look, because they're the kind of call you can only make after you've understood how others did it, and they're judgments you can lift straight into your own fork.
 
@@ -169,7 +169,7 @@ I also wrote a bilingual source-reading series, one intro plus eight parts, each
 
 Once you understand it, the natural next step is to fork. Getting started doesn't take much:
 
-- **Swap in a model you actually use.** It's the two env vars from above; `llm.py` (480 lines) is the entry point for all provider adaptation.
+- **Swap in a model you actually use.** It's the two env vars from above; `llm.py` (518 lines) is the entry point for all provider adaptation.
 - **Add a tool of your own.** Write a new file against the tool base class in `tools/base.py` (77 lines): run tests, fetch a page, call an LSP, whatever. The end of the second essay walks you through your first one by hand.
 - **Rewrite the system prompt.** `prompt.py` is all of 41 lines; change one line and you'll watch the agent's temperament shift. It's the cheapest "change one thing, see a result" in the whole project.
 - **Import it as a library.** The top level exports `Agent`, `LLM`, and `Config`, ready to embed in your own program:
@@ -202,6 +202,7 @@ Inside the REPL, `/help` lists everything; these are the ones you'll reach for:
 /undo            revert the most recent file change
 /plan            toggle plan mode (read-only, then a plan to approve)
 /save  /sessions save / list sessions
+/mcp             MCP server status; /mcp reconnect <name> revives a dead one
 quit / exit      exit (Ctrl+C cancels the current round)
 ```
 
@@ -210,6 +211,10 @@ Session IDs are sanitized before they become filenames, and conversation saves l
 For scripts, run `corecoder --json --max-rounds 10 -p "inspect this project"`. Standard output contains one JSON object with the accumulated answer, tool errors, run usage, and completion status; tool and reasoning displays go to standard error. Exit codes are `0` for completion, `2` for the round limit, `130` for cancellation, and `1` for failure. Library callers can use `Agent.chat_result()` for the same structured result; `Agent.chat()` continues to return text and propagate exceptions.
 
 Usage is recorded per request attempt with a fixed model and rate snapshot. Switching models does not reprice history. `/tokens` reports known cost separately from requests with unknown rates or missing usage. Legacy aggregate counts resume with unknown prices.
+
+Override rates in `~/.corecoder/pricing.json`, in USD per million input/output tokens. Model-only entries such as `{"my-model": [1, 2]}` apply to the default endpoint. For a custom endpoint, use `{"endpoints": {"https://example.com/v1": {"my-model": [1, 2]}}}` with the exact configured URL. Invalid rates are ignored. Changes affect subsequent requests; recorded requests keep their original rate snapshots.
+
+`/mcp reconnect <name>` starts a fresh process and repeats protocol validation and complete paginated discovery. In-flight calls fail without replay. If tool names, descriptions or schemas change, reconnect fails and asks you to restart the session so the agent can register the new definitions.
 
 ## Permissions
 
@@ -273,7 +278,7 @@ Drop a `mcp.json` under `~/.corecoder` and tools from any MCP server join the ag
 }
 ```
 
-Each configured server starts as a subprocess at launch, handshakes, and lists its tools; every one is registered as `mcp__<server>__<tool>`, so hook matchers and the consent gate treat it exactly like a built-in. MCP tools stay out of the read-only set, meaning the agent asks before running one. The handshake gets fifteen seconds, a call gets sixty, and a server that dies or never answers fails that one call as an ordinary tool result instead of killing the loop. The client speaks the tools slice of the protocol (initialize, tools/list, tools/call) and nothing else, which keeps the whole thing inside `mcp.py` at about 200 lines. With no `mcp.json` there is no MCP and nothing changes.
+Each configured server starts as a subprocess at launch, handshakes, and lists its tools; every one is registered as `mcp__<server>__<tool>`, so hook matchers and the consent gate treat it exactly like a built-in. MCP tools stay out of the read-only set, meaning the agent asks before running one. The handshake gets fifteen seconds, a call gets sixty, and a server that dies or never answers fails that one call as an ordinary tool result instead of killing the loop. The REPL's `/mcp` lists every server with its state, and `/mcp reconnect <name>` starts a dead one fresh: new process, new handshake, and the tools the agent already holds work again with no restart. The client speaks the tools slice of the protocol (initialize, tools/list, tools/call) and nothing else, which keeps the whole thing inside `mcp.py` in a single module. With no `mcp.json` there is no MCP and nothing changes. A runnable starter config lives in [`examples/mcp_filesystem.md`](examples/mcp_filesystem.md): the reference filesystem server, scoped to one directory, behind the same consent gate.
 
 ## Related Projects
 
@@ -287,10 +292,10 @@ If working through CoreCoder was useful, here are a few other tools I've built a
 
 ## Contributing / License
 
-Before you send anything, run `pytest tests/ -q` (214 tests), `ruff check`, and `compileall`, and make sure they're green. MIT licensed: fork it, learn from it, ship something better. A mention of this project is appreciated.
+Before you send anything, run `pytest tests/ -q` `ruff check`, and `compileall`, and make sure they're green. MIT licensed: fork it, learn from it, ship something better. A mention of this project is appreciated.
 
 ---
 
-By [Yufeng He](https://github.com/he-yufeng), formerly at Moonshot AI (Kimi). I earlier wrote a fairly complete [Claude Code source analysis](https://zhuanlan.zhihu.com/p/1898797658343862272) on Zhihu; this project is its hands-on counterpart: that one walks you through reading it, this one through rebuilding it.
+By [Yufeng He](https://github.com/he-yufeng), formerly at Moonshot AI (Kimi). I earlier wrote a fairly complete [Claude Code source analysis](article/claude-code-source-analysis.md) (written in Chinese); this project is its hands-on counterpart: that one walks you through reading it, this one through rebuilding it.
 
 > CoreCoder was formerly named NanoCoder; it was renamed to avoid confusion with [Nano-Collective/nanocoder](https://github.com/Nano-Collective/nanocoder), and old links redirect here automatically.

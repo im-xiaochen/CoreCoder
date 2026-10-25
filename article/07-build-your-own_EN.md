@@ -16,7 +16,7 @@ pip install -e .
 python -m pytest tests/ -q
 ```
 
-That last line should show 86 tests all green. Don't skip this step. It confirms your environment is clean, so that when you later break something you can be sure it was you who broke it, not the environment being broken to begin with. The tests this project ships with aren't decoration, they're your safety net while refactoring, and all those pits the earlier pieces kept mentioning (orphaned tool messages, concurrency races, path traversal) are pinned down by tests. Every time you change something next, you should come back and run this line.
+That last line should show the collected tests passing. Don't skip this step. It confirms your environment is clean, so that when you later break something you can be sure it was you who broke it, not the environment being broken to begin with. The tests this project ships with aren't decoration, they're your safety net while refactoring, and all those pits the earlier pieces kept mentioning (orphaned tool messages, concurrency races, path traversal) are pinned down by tests. Every time you change something next, you should come back and run this line.
 
 ## Step one: plug in your own model
 
@@ -146,7 +146,7 @@ print(report)
 
 This `reviewer` is an agent safe enough that you'd dare run it inside automation. It can read through and search the entire codebase, but it can't change a single byte or run a single command, because those tools simply aren't in its tool set. This is exactly the usage planted back when piece one stressed "the tool set is instance-level": the cleanest way to constrain what an agent can do isn't to write a pile of rules begging it not to misbehave, but to withhold the capability at the source. The tools you give it are the whole boundary of what it can do.
 
-Used as a library, you can build far more than a CLI: a review bot running in CI, a chat endpoint hooked into a web backend, a script batch-processing a heap of repos. The kernel is just over a thousand lines, and what shell you wrap around it is up to you.
+Used as a library, you can build far more than a CLI: a review bot running in CI, a chat endpoint hooked into a web backend, a script batch-processing a heap of repos. The kernel is just over thirteen hundred lines, and what shell you wrap around it is up to you.
 
 ## Step five: pair your change with a test
 
@@ -159,7 +159,7 @@ def test_fetch_rejects_non_http():
     assert "only http" in r
 ```
 
-Then `python -m pytest tests/ -q`, and watch it go from 86 to 87.
+Then `python -m pytest tests/ -q`, and watch it gain one passing test.
 
 I single out this step because it's the watershed between "dabbling" and "doing it seriously." The most valuable designs in the first six pieces, the defense against orphaned tool messages, concurrency safety, the two gates against path traversal, all come paired with tests. These tests aren't a formality written for others to see; they solidify an invariant hidden in your head, so that the you of three months from now, or whoever takes over, knows immediately on breaking it. Every capability you add to the agent is worth a test to pin its boundary down. This is the work habit this project means to teach you along the way.
 
@@ -179,7 +179,7 @@ Pick one you genuinely need and do it. Don't let the length of the list make you
 
 If this series leaves you with only one thing, I hope it's this: a coding agent is less mysterious than it seems, it's just a stack of engineering decisions you can fully reach, piled up.
 
-Looking back over the six pieces, it's really only a few blocks. A capped loop (piece one), plus a set of clean-interfaced tools that let it act (piece two). The model interface is a thin provider wrapper (piece three), and context fights forgetting with layered compression (piece four). It can split itself and run concurrently, on the strength of restraint about shared state (piece five); the outermost CLI emits events, handles presentation, and plugs the path-traversal hole while it's at it (piece six). The engine adds up to just over a thousand lines, and even with that CLI shell on top the whole package is only 1714, with not a single spot you can't understand.
+Looking back over the six pieces, it's really only a few blocks. A capped loop (piece one), plus a set of clean-interfaced tools that let it act (piece two). The model interface is a thin provider wrapper (piece three), and context fights forgetting with layered compression (piece four). It can split itself and run concurrently, on the strength of restraint about shared state (piece five); the outermost CLI emits events, handles presentation, and plugs the path-traversal hole while it's at it (piece six). The engine adds up to just over thirteen hundred lines, and even with that CLI shell on top the whole package is only 2,276, with not a single spot you can't understand.
 
 Now you don't just understand it, you've forked it, plugged in your own model, added your own tool, and tuned its own temperament. It's yours.
 

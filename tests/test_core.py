@@ -1,5 +1,6 @@
 """Tests for core modules: config, context, session, imports."""
 
+import json
 import re
 import tempfile
 from pathlib import Path
@@ -54,6 +55,47 @@ def test_readme_line_counts_are_current():
     assert f"{len(package_files)} files" in readme
     assert f"{physical:,} physical lines" in readme
     assert f"{package_net:,} net" in readme
+
+
+def test_doc_python_line_references_are_current():
+    # Prose across the READMEs and essays cites per-file line counts like
+    # `agent.py` (240 lines) / `agent.py`（240 行）/ `llm.py`, 332 lines. Those
+    # drifted before; sweep every one against the real file so a code change
+    # that grows a file rings here instead of lying in the docs.
+    root = Path(__file__).resolve().parent.parent
+    ref_re = re.compile(
+        r"((?:corecoder/)?(?:tools/)?[a-z_]+\.py)[^()\n]{0,25}?(\d+)\s*(?:lines|行)(?!\s*(?:上下|多|来))"
+    )
+    actual = {
+        # POSIX form so the forward-slash references resolve on Windows too
+        p.relative_to(root).as_posix(): len(p.read_text(encoding="utf-8").splitlines())
+        for p in (root / "corecoder").rglob("*.py")
+    }
+
+    def resolve(ref: str) -> int | None:
+        for candidate in (ref, f"corecoder/{ref}", f"corecoder/tools/{ref.rsplit('/', 1)[-1]}"):
+            if candidate in actual:
+                return actual[candidate]
+        return None
+
+    docs = [root / "README.md", root / "README_CN.md"] + sorted(
+        (root / "article").glob("*.md")
+    )
+    stale = []
+    for doc in docs:
+        text = doc.read_text(encoding="utf-8")
+        for m in ref_re.finditer(text):
+            # hedged figures ("about 200 lines", 约 200 行) are rhetoric, not pins
+            if "about" in m.group(0) or "约" in m.group(0):
+                continue
+            real = resolve(m.group(1))
+            assert real is not None, f"{doc.name}: unresolvable file reference {m.group(1)}"
+            if real != int(m.group(2)):
+                line_no = text[: m.start()].count("\n") + 1
+                stale.append(
+                    f"{doc.name}:{line_no}: {m.group(1)} cites {m.group(2)}, actual {real}"
+                )
+    assert not stale, "stale line-count references:\n" + "\n".join(stale)
 
 
 def test_public_api_exports():
@@ -218,6 +260,36 @@ def test_cost_estimation_unknown_model():
     llm = LLM(model="some-custom-model", api_key="offline")
     llm._drain(iter([SimpleNamespace(usage=SimpleNamespace(prompt_tokens=1000, completion_tokens=500), choices=[])]), None, None)
     assert llm.estimated_cost is None
+
+
+def _llm_at(model, prompt_tokens=1_000_000, completion_tokens=500_000):
+    from corecoder.llm import LLM
+    llm = LLM(model=model, api_key="offline")
+    llm._drain(iter([SimpleNamespace(usage=SimpleNamespace(prompt_tokens=prompt_tokens,
+                       completion_tokens=completion_tokens), choices=[])]), None, None)
+    return llm
+
+
+def test_pricing_json_overrides_and_extends_the_builtin_table(monkeypatch, tmp_path):
+    from corecoder import llm as llm_module
+    custom = tmp_path / "pricing.json"
+    custom.write_text(
+        json.dumps({"gpt-5.4": [100, 200], "my-own-model": [1, 2]}), encoding="utf-8"
+    )
+    monkeypatch.setattr(llm_module, "PRICING_FILE", custom)
+
+    assert _llm_at("gpt-5.4").estimated_cost == 100 + 100  # the override wins over (2.5, 15)
+    assert _llm_at("my-own-model").estimated_cost == 1 + 1  # a model the built-ins never heard of
+
+
+@pytest.mark.parametrize("content", ["{not json", '{"gpt-5.4": "cheap"}', '[1, 2]'])
+def test_a_broken_pricing_json_falls_back_to_the_builtin_table(monkeypatch, tmp_path, content):
+    from corecoder import llm as llm_module
+    broken = tmp_path / "pricing.json"
+    broken.write_text(content, encoding="utf-8")
+    monkeypatch.setattr(llm_module, "PRICING_FILE", broken)
+
+    assert _llm_at("gpt-5.4").estimated_cost == 2.5 + 7.5
 
 
 # --- Changed files tracking ---

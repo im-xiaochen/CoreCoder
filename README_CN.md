@@ -2,7 +2,7 @@
 
 # CoreCoder
 
-**编程 agent 里的 nanoGPT。2.2k 行引擎、整包 4702 行纯 Python，读懂一个 coding agent 到底怎么运作，再 fork 出你自己的。**
+**编程 agent 里的 nanoGPT。2.2k 行引擎、整包 4855 行纯 Python，读懂一个 coding agent 到底怎么运作，再 fork 出你自己的。**
 
 *learn from it · fork it · ship something better*
 
@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
-[![engine](https://img.shields.io/badge/engine-2190_LoC-blue)](article/)
+[![engine](https://img.shields.io/badge/engine-2224_LoC-blue)](article/)
 [![源码导读](https://img.shields.io/badge/源码导读-8篇双语-orange)](article/)
 
 </div>
@@ -25,7 +25,7 @@
 
 | | CoreCoder | Claude Code | aider | nanoGPT |
 |---|---|---|---|---|
-| 代码量 | 引擎约 2190 行 / 整包 4712 行 | 几十万行（闭源） | 数万行 Python | 约 600 行（两个文件） |
+| 代码量 | 引擎约 2224 行 / 整包 4855 行 | 几十万行（闭源） | 数万行 Python | 约 600 行（两个文件） |
 | 读完要多久 | 一个下午 | 读不了（闭源） | 得啃几天 | 一个下午 |
 | 能不能下断点改了再跑 | 能，每一行 | 不能 | 能，但量大 | 能 |
 | 定位 | 读懂并 fork 出你自己的 agent | 生产级编程助手 | 终端结对编程 | 教学用最小 GPT |
@@ -36,9 +36,9 @@ nanoGPT 那一列是拿来对照的：它最小、可读，但教的是训一个
 
 我一直觉得 coding agent 被讲得太玄了。把 Claude Code、Cursor 这类工具扒到底，核心是一个 while 循环套着一个大模型，外加七八个让它能真正动手的工具。难的从来不是这个循环，而是循环跑进真实世界以后要兜的那些底。CoreCoder 就是把这个核心老老实实写出来的最小版本。
 
-引擎部分（循环、模型接口、上下文、工具、会话）去掉空行和注释是 2190 行。连最外层的 CLI、配置、打包一起算，整个包 29 个文件、物理 4712 行、净 4000 行。自 1161 行快照之后增加了 plan mode、hooks、checkpoints、请求预算、工具校验和用量账本等功能。
+引擎部分（循环、模型接口、上下文、工具、会话）去掉空行和注释是 2224 行。连最外层的 CLI、配置、打包一起算，整个包 29 个文件、物理 4855 行、净 4132 行。自 1161 行快照之后增加了 plan mode、hooks、checkpoints、请求预算、工具校验和用量账本等功能。
 
-它真能跑：读写文件、执行 shell、派子 agent、按请求预算归档并压缩上下文，还能随时把这趟烧掉的 token 和美元数报给你。任何要动你磁盘、要跑命令的调用，都会先停下来等你点头，214 个测试是绿的。但能跑不是为了劝你拿去日用，而是为了让这份「注释」不撒谎：一个解释 agent 怎么运作的范例，自己得真能运作。
+它真能跑：读写文件、执行 shell、派子 agent、按请求预算归档并压缩上下文，还能随时把这趟烧掉的 token 和美元数报给你。任何要动你磁盘、要跑命令的调用，都会先停下来等你点头，回归测试覆盖了这些行为。但能跑不是为了劝你拿去日用，而是为了让这份「注释」不撒谎：一个解释 agent 怎么运作的范例，自己得真能运作。
 
 代码来自一次公开拆解。公开的源码分析里，Claude Code 这类生产级 agent 暴露出不少关键架构，我挑出最核心的一层，用尽量少的代码诚实地复写了一遍。所以读 CoreCoder，约等于读一份基于公开源码分析的「可运行注释版」：讲的是这类 agent 的核心思路，而它本身只是最小复写，就摆在你机器上，随你拆、随你改。
 
@@ -147,7 +147,7 @@ def chat(self, user_input):
     return "(已达轮次上限)"
 ```
 
-就这么点。这个循环的核心骨架就二十来行，把并行执行和被 Ctrl+C 打断后的回填都算上，也才四十多行。CoreCoder 一千多行里剩下的，几乎全在收拾它真跑起来之后冒出来的岔子。`llm.py` 最后成了全项目最大的文件，不是因为调模型有多难，而是流式返回里一个工具调用的参数会被切成好几段先后送到、得按顺序拼回去，provider 偶尔吐半截 JSON 或把 usage 填成 null，限流（429）、超时、连接中断和 5xx 都得退避重试，其余 4xx 该直接抛就别硬试。已经开始出字的流也可能半路断掉，所以重试包住的是整个请求，不只是建连。这些不起眼的脏活，而不是那个循环，才是一个 agent 从能演示走到能交付真正吃工程功夫的地方；第三篇文章顺着它拆到每一行。
+就这么点。这个循环的核心骨架就二十来行，把并行执行和被 Ctrl+C 打断后的回填都算上，也才四十多行。CoreCoder 一千多行里剩下的，几乎全在收拾它真跑起来之后冒出来的岔子。`llm.py` 最后成了引擎里最大的文件，不是因为调模型有多难，而是流式返回里一个工具调用的参数会被切成好几段先后送到、得按顺序拼回去，provider 偶尔吐半截 JSON 或把 usage 填成 null，限流（429）、超时、连接中断和 5xx 都得退避重试，其余 4xx 该直接抛就别硬试。已经开始出字的流也可能半路断掉，所以重试包住的是整个请求，不只是建连。这些不起眼的脏活，而不是那个循环，才是一个 agent 从能演示走到能交付真正吃工程功夫的地方；第三篇文章顺着它拆到每一行。
 
 有三个决定值得单独看，因为它们是「先读懂别人怎么做」之后才做得出的取舍，也是你 fork 自己 agent 时可以直接抄走的判断。
 
@@ -177,7 +177,7 @@ def chat(self, user_input):
 
 读懂之后，最自然的下一步就是 fork。起手不用伤筋动骨：
 
-- **换个你常用的模型。** 就是上面那两个环境变量，`llm.py`（480 行）是所有 provider 适配的入口。
+- **换个你常用的模型。** 就是上面那两个环境变量，`llm.py`（518 行）是所有 provider 适配的入口。
 - **加一件你自己的工具。** 照 `tools/base.py`（77 行）的工具基类写个新文件，跑测试、抓网页、调 LSP 都行，第二篇文章末尾手把手带你写第一个。
 - **改系统提示词。** `prompt.py` 才 41 行，改一句就能看到 agent 的脾气变了，是门槛最低的「改一处就有反馈」。
 - **直接当库 import。** 顶层导出了 `Agent`、`LLM`、`Config`，能嵌进你自己的程序：
@@ -210,6 +210,7 @@ README 只给方向，每条的代码细节第七篇接着讲。挑一个动手�
 /undo            撤销最近一次文件改动
 /plan            开关计划模式（只读摸底，再交出待批准的计划）
 /save  /sessions 保存 / 列出会话
+/mcp             MCP 服务器状态；/mcp reconnect <名字> 拉起挂掉的一台
 quit / exit      退出（Ctrl+C 取消当前回合）
 ```
 
@@ -218,6 +219,10 @@ quit / exit      退出（Ctrl+C 取消当前回合）
 脚本可使用 `corecoder --json --max-rounds 10 -p "检查这个项目"`。标准输出只有一个 JSON 对象，包含累计正文、工具错误、本次用量和结束状态；工具展示及推理输出进入标准错误。退出码分别为：完成 `0`、达到轮数上限 `2`、取消 `130`、失败 `1`。库调用可用 `Agent.chat_result()` 获取相同结构；`Agent.chat()` 继续返回正文并传播异常。
 
 用量按每次请求尝试记入账本，固定当时的模型和费率，切换模型不会重新定价历史。`/tokens` 分开显示已知费用、未知费率和缺失用量的请求。只有累计计数的旧存档以未知价格恢复。
+
+可在 `~/.corecoder/pricing.json` 中覆盖价格，单位为美元/百万输入、输出 token。`{"my-model": [1, 2]}` 这样的模型级条目适用于默认端点；自定义端点使用 `{"endpoints": {"https://example.com/v1": {"my-model": [1, 2]}}}`，URL 与配置精确对应。无效费率会被忽略，改价仅影响后续请求，历史请求保留原费率快照。
+
+`/mcp reconnect <名字>` 会启动新进程，重新验证协议并完成分页工具发现。重连时正在执行的调用会失败，不自动重放。如果工具名称、描述或参数 schema 已改变，重连会失败并提示重启会话，确保 agent 使用新定义。
 
 ## 权限
 
@@ -280,7 +285,7 @@ REPL 里 `/plan` 开关计划模式。开着的时候，提示符变成 `(plan)`
 }
 ```
 
-每个配好的服务器在启动时拉起一个子进程，握手、列出工具；每件工具都注册成 `mcp__<服务器>__<工具>`，钩子匹配和授权闸对它和内建工具一视同仁。MCP 工具不在只读名单里，模型要调，得先问过你。握手给十五秒，一次调用给六十秒；服务器挂了或者迟迟不应，那一次调用就以普通工具结果的形式报错，循环照常往下走。客户端只实现协议里工具那一小片（initialize、tools/list、tools/call），别的一概不碰，所以整块实现收在 `mcp.py` 一个文件里，两百行出头。没有 `mcp.json` 就没有 MCP，一切照旧。
+每个配好的服务器在启动时拉起一个子进程，握手、列出工具；每件工具都注册成 `mcp__<服务器>__<工具>`，钩子匹配和授权闸对它和内建工具一视同仁。MCP 工具不在只读名单里，模型要调，得先问过你。握手给十五秒，一次调用给六十秒；服务器挂了或者迟迟不应，那一次调用就以普通工具结果的形式报错，循环照常往下走。REPL 里的 `/mcp` 列出每台服务器的状态，`/mcp reconnect <名字>` 把挂掉的重新拉起：新进程、重新握手，agent 手里已有的工具不用重启就恢复可用。客户端只实现协议里工具那一小片（initialize、tools/list、tools/call），别的一概不碰，所以整块实现收在 `mcp.py` 一个文件里，集中实现这些行为。没有 `mcp.json` 就没有 MCP，一切照旧。想直接跑起来的话，[`examples/mcp_filesystem.md`](examples/mcp_filesystem.md) 给了一个最小配置：MCP 官方的参考文件系统服务器，只暴露一个目录，照样过授权闸。
 
 ## 相关项目
 
@@ -294,10 +299,10 @@ REPL 里 `/plan` 开关计划模式。开着的时候，提示符变成 `(plan)`
 
 ## 贡献 / License
 
-动手之前先跑一遍 `pytest tests/ -q`（214 个测试）、`ruff check` 和 `compileall`，绿了再提。MIT License，欢迎 fork 拿去造更好的东西，能在 README 里留一句出处就更好。
+动手之前先跑一遍 `pytest tests/ -q`、`ruff check` 和 `compileall`，绿了再提。MIT License，欢迎 fork 拿去造更好的东西，能在 README 里留一句出处就更好。
 
 ---
 
-作者 [何宇峰](https://github.com/he-yufeng)，曾任职 Moonshot AI (Kimi)。早前写过一篇相当完整的 [Claude Code 源码分析](https://zhuanlan.zhihu.com/p/1898797658343862272)，这个项目是它的动手版：那篇带你读懂，这个带你重建。
+作者 [何宇峰](https://github.com/he-yufeng)，曾任职 Moonshot AI (Kimi)。早前写过一篇相当完整的 [Claude Code 源码分析](article/claude-code-source-analysis.md)，这个项目是它的动手版：那篇带你读懂，这个带你重建。
 
 > CoreCoder 原名 NanoCoder，为避免和 [Nano-Collective/nanocoder](https://github.com/Nano-Collective/nanocoder) 混淆而改名，旧链接会自动跳到这里。

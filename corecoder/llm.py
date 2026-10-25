@@ -11,9 +11,11 @@ single unified interface. Set CORECODER_PROVIDER=litellm.
 
 import contextvars
 import json
+import math
 import time
 from dataclasses import dataclass, field
 from decimal import Decimal
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
@@ -91,6 +93,42 @@ _PRICING = {
     "kimi-k2.5": (0.6, 3),
 }
 
+# same shape as the table above; entries here win over the built-ins
+PRICING_FILE = Path.home() / ".corecoder" / "pricing.json"
+
+
+def _load_pricing() -> dict:
+    """Built-in prices overlaid with the user's pricing.json, so a new model
+    or a price change lands without waiting for a release. A missing or
+    broken file just means the built-ins."""
+    pricing = dict(_PRICING)
+    try:
+        overrides = json.loads(PRICING_FILE.read_text(encoding="utf-8"))
+        if not isinstance(overrides, dict):
+            return pricing
+        tables = [(None, overrides)]
+        endpoints = overrides.get("endpoints", {})
+        if isinstance(endpoints, dict):
+            tables += [(endpoint, rates) for endpoint, rates in endpoints.items() if isinstance(endpoint, str) and endpoint]
+        for endpoint, rates in tables:
+            if not isinstance(rates, dict):
+                continue
+            for model, rate in rates.items():
+                if not isinstance(model, str) or not model or not isinstance(rate, (list, tuple)) or len(rate) != 2:
+                    continue
+                try:
+                    valid = all(isinstance(value, (int, float)) and not isinstance(value, bool)
+                                and math.isfinite(value) and value >= 0 for value in rate)
+                except OverflowError:
+                    valid = False
+                if not valid:
+                    continue
+                key = model if endpoint is None else (_safe_endpoint(endpoint), model)
+                pricing[key] = tuple(rate)
+    except (OSError, ValueError, TypeError, OverflowError):
+        pass
+    return pricing
+
 
 def _safe_endpoint(url: str | None) -> str:
     if not url:
@@ -107,7 +145,7 @@ def _safe_endpoint(url: str | None) -> str:
 
 
 def _pricing_for(provider: str, endpoint: str, model: str, overrides=None):
-    table = overrides or _PRICING
+    table = overrides if overrides is not None else _load_pricing()
     for key in ((provider, endpoint, model), (endpoint, model)):
         if key in table:
             return table[key]
