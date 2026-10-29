@@ -101,6 +101,7 @@ pre {
   min-height: 550px;
   display: grid;
   grid-template-columns: 244px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 .workbench.with-inspector {
@@ -150,6 +151,8 @@ pre {
   border-right: 1px solid #e8e9ec;
   padding: 24px 16px 0;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 .sidebar:not(.is-open) {
   display: none;
@@ -389,6 +392,8 @@ pre {
 }
 .main-panel {
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -2195,7 +2200,7 @@ pre {
   }
   .composer textarea {
     padding: 15px 15px 5px;
-    font-size: 11px;
+    font-size: 16px;
     min-height: 70px;
   }
   .composer-toolbar {

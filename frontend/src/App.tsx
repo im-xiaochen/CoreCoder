@@ -214,7 +214,7 @@ function ToolCard({
   name,
   args,
   result,
-  status,
+  status = "unknown",
   stage,
   warning,
   running = false,

@@ -134,7 +134,7 @@ export function mergeToolEvents(events: ToolEvent[]): ToolView[] {
           ? prior.arguments
           : event.arguments || {},
         result: event.result,
-        status,
+        status: status || "unknown",
         stage: event.stage,
         warning: event.warning,
         running: false,

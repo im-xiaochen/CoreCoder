@@ -74,6 +74,13 @@ describe("durable run results", () => {
 });
 
 describe("tool event merge", () => {
+  it("does not infer success from a legacy result without a status", () => {
+    expect(mergeToolEvents([
+      { type: "tool_start", id: "legacy", name: "read_file" },
+      { type: "tool_result", id: "legacy", result: "legacy output" },
+    ])).toMatchObject([{ status: "unknown", running: false }]);
+  });
+
   it("pairs repeated ids in occurrence order and keeps result-only calls terminal", () => {
     const events = [
       {
