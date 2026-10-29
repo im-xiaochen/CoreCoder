@@ -951,7 +951,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main-panel">
+      <main className={`main-panel ${empty && !initializing ? "is-empty" : ""}`}>
         <header className="topbar">
           <div className="breadcrumbs">
             {!sidebar && (
@@ -1074,78 +1074,14 @@ export default function App() {
             </div>
           ) : empty ? (
             <section className="welcome">
-              <div className="welcome-eyebrow">
-                <span className="status-dot" />
-                YOUR LOCAL CODING WORKSPACE
-              </div>
-              <div className="hero-mark">
-                <Code2 size={33} strokeWidth={1.6} />
-                <span className="hero-node" />
-                <span className="hero-orbit" />
-              </div>
-              <h1>
-                今天，想构建什么<span>？</span>
-              </h1>
-              <p className="welcome-description">
-                从读懂一段代码，到完成下一次改进。
-                <br />和 CoreCoder 一起，把想法变成可运行的代码。
-              </p>
+              <h1>开始一个任务</h1>
+              <p className="welcome-description">在当前项目中提问、规划或修改代码。</p>
               <div className="workspace-chip">
                 <FolderOpen size={14} />
                 <span>{boot?.project || "CoreCoder"}</span>
                 <span className="chip-separator" />
                 <GitBranch size={13} />
                 <span>本地工作区</span>
-              </div>
-              <div className="suggestions">
-                {[
-                  {
-                    icon: Compass,
-                    title: "读懂这个项目",
-                    text: "梳理结构，找到关键入口",
-                    prompt:
-                      "请阅读这个项目，梳理项目结构、核心入口和各模块职责，先不要修改文件。",
-                    color: "blue",
-                  },
-                  {
-                    icon: ListChecks,
-                    title: "规划下一步改进",
-                    text: "先给出思路，再逐步实现",
-                    prompt:
-                      "请分析目前项目有哪些值得优先完善的功能，给出具体改进计划，先不要执行修改。",
-                    color: "amber",
-                  },
-                  {
-                    icon: GitPullRequest,
-                    title: "检查代码质量",
-                    text: "发现问题，补齐遗漏",
-                    prompt:
-                      "请审查项目核心代码与现有测试，找出可能的 bug 和未覆盖场景，并按优先级列出。",
-                    color: "green",
-                  },
-                ].map((item) => (
-                  <button
-                    key={item.title}
-                    className="suggestion-card"
-                    disabled={idleDisabled}
-                    onClick={() => {
-                      setDraft(item.prompt);
-                      draftRef.current = item.prompt;
-                      textarea.current?.focus();
-                    }}
-                  >
-                    <span className={`suggestion-icon ${item.color}`}>
-                      <item.icon size={19} />
-                    </span>
-                    <ArrowUpRight size={14} className="suggestion-arrow" />
-                    <strong>{item.title}</strong>
-                    <p>{item.text}</p>
-                  </button>
-                ))}
-              </div>
-              <div className="welcome-footnote">
-                <ShieldCheck size={13} />
-                文件修改与命令执行，会先征求你的许可。
               </div>
             </section>
           ) : (
@@ -1331,6 +1267,54 @@ export default function App() {
                 批准计划
                 <ArrowUpRight size={13} />
               </button>
+            </div>
+          )}
+          {empty && !initializing && (
+            <div className="suggestions">
+              {[
+                {
+                  icon: Compass,
+                  title: "读懂这个项目",
+                  text: "梳理结构，找到关键入口",
+                  prompt:
+                    "请阅读这个项目，梳理项目结构、核心入口和各模块职责，先不要修改文件。",
+                  color: "blue",
+                },
+                {
+                  icon: ListChecks,
+                  title: "规划下一步改进",
+                  text: "先给出思路，再逐步实现",
+                  prompt:
+                    "请分析目前项目有哪些值得优先完善的功能，给出具体改进计划，先不要执行修改。",
+                  color: "amber",
+                },
+                {
+                  icon: GitPullRequest,
+                  title: "检查代码质量",
+                  text: "发现问题，补齐遗漏",
+                  prompt:
+                    "请审查项目核心代码与现有测试，找出可能的 bug 和未覆盖场景，并按优先级列出。",
+                  color: "green",
+                },
+              ].map((item) => (
+                <button
+                  key={item.title}
+                  className="suggestion-card"
+                  disabled={idleDisabled}
+                  onClick={() => {
+                    setDraft(item.prompt);
+                    draftRef.current = item.prompt;
+                    textarea.current?.focus();
+                  }}
+                >
+                  <span className={`suggestion-icon ${item.color}`}>
+                    <item.icon size={19} />
+                  </span>
+                  <ArrowUpRight size={14} className="suggestion-arrow" />
+                  <strong>{item.title}</strong>
+                  <p>{item.text}</p>
+                </button>
+              ))}
             </div>
           )}
           <form
