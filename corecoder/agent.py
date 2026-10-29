@@ -20,6 +20,8 @@ class Agent:
         if isinstance(max_rounds, bool) or not isinstance(max_rounds, int) or max_rounds < 1:
             raise ValueError("max_rounds must be an integer >= 1")
         self.llm, self.state = llm, state or SessionState()
+        # The tool retains this token, so a freed Agent's address cannot be reused as its owner.
+        self._tool_owner_token = object()
         if tools is None:
             self.tools = create_tools(self.state)
         else:
@@ -27,8 +29,8 @@ class Agent:
             for tool in tools:
                 owner = getattr(tool, "_corecoder_owner", None)
                 if owner is None and getattr(tool, "state", None) is None and not getattr(tool, "stateless", False):
-                    tool._corecoder_owner = id(self)
-                elif owner is not None and owner != id(self):
+                    tool._corecoder_owner = self._tool_owner_token
+                elif owner is not None and owner is not self._tool_owner_token:
                     raise ValueError(f"custom tool {tool.name!r} has an existing owner and cannot be reused")
                 tool_state = getattr(tool, "state", None)
                 if tool_state is not None and tool_state is not self.state:

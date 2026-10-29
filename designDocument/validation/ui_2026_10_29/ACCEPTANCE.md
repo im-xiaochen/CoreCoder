@@ -44,7 +44,7 @@
 | 依赖审计 | DOMPurify 3.4.17、Vitest 4.1.12；npm audit返回0项漏洞。 |
 | 旧会话状态 | 没有明确结果状态的工具显示“结果未知”，不再默认打成功勾；补充回归测试。 |
 | 浏览器控制台 | 本次最终页面检查无error/warn。 |
-| Python | 本轮未改生产Python代码；基线全套477 passed / 2 skipped，修复提交后后端接口16 passed。远端CI继续执行完整Python矩阵。 |
+| Python | UI验收时基线全套477 passed / 2 skipped，修复提交后后端接口16 passed。后续CI发现的工具归属缺陷及最终回归见下方补充。 |
 
 桌面滚动修复使用 `grid-template-rows: minmax(0, 1fr)`，并让主面板 `min-height: 0; overflow: hidden`，消息区承担滚动。删除了子代理最后新增的JSDOM样式断言：JSDOM不执行真实布局，该断言只重复CSS声明；这里采用浏览器实际尺寸与截图作为验收依据。
 
@@ -59,3 +59,7 @@
 [PR #3](https://github.com/im-xiaochen/CoreCoder/pull/3) 的首轮CI发现既有接口测试 `test_web_snapshot_keeps_repeated_call_id_outcomes_in_order` 在英文Windows runner使用cp1252写入中文“保留”时抛出UnicodeEncodeError。失败发生在测试数据准备阶段；其他477项通过，1项跳过。已为该测试文件写入显式指定UTF-8，保持生产代码和断言不变，再由PR完整矩阵复验。前端CI、lint和打包首轮均通过。
 
 编码修正后，Windows/Linux全部版本与前端、lint、打包通过；macOS ARM64的Python 3.13也通过。但另两个macOS任务在长期排队后被GitHub取消，注释为“未能分配hosted runner”和“macOS arm64容量受限”，未进入测试步骤。根据[GitHub官方runner表](https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job)，将macOS矩阵固定为标准 `macos-15-intel`，保留Python 3.10–3.13四个版本、完整测试命令及失败门槛，重新执行整个PR CI。该调整验证macOS Intel，不等同于四版本ARM64覆盖；本次前端和纯Python改动没有增加架构相关代码。
+
+Intel macOS Python 3.11实际测试又暴露了既有工具归属缺陷：自定义有状态工具以 `id(self)` 记录Agent归属，原Agent释放后地址复用可让新Agent被错误识别为原持有者。主代理在既有隔离测试中模拟地址相同，先在旧实现确定性复现失败，再改为工具持有的独立 `object()` 标记并用对象身份比较。标记不强引用Agent，既阻止跨Agent复用，也不会为工具额外保留整个Agent。同步更新README与文章的行数引用，保留完整隔离断言；完整Python回归及PR CI重新执行。
+
+工具归属修复后，本地完整Python回归：477 passed、2 skipped，64.72秒；相关ruff检查通过。两项跳过为按环境选择的测试，未为通过CI新增skip。最终远端CI结果以PR最新提交的15项检查为准。

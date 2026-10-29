@@ -26,7 +26,10 @@ def test_bound_agent_tool_cannot_be_stolen():
     assert tool._parent_agent is original
 
 
-def test_custom_mutable_tool_without_clone_cannot_cross_agents():
+def test_custom_mutable_tool_without_clone_cannot_cross_agents(monkeypatch):
+    # Simulate the allocator reusing an Agent address after its owner is freed.
+    monkeypatch.setattr("corecoder.agent.id", lambda _agent: 1, raising=False)
+
     class CounterTool(Tool):
         name = "counter"
         description = "test mutable custom tool"

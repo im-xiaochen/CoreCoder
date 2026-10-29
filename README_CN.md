@@ -2,7 +2,7 @@
 
 # CoreCoder
 
-**编程 agent 里的 nanoGPT。2.2k 行引擎、整包 4855 行纯 Python，读懂一个 coding agent 到底怎么运作，再 fork 出你自己的。**
+**编程 agent 里的 nanoGPT。2.2k 行引擎、整包 4857 行纯 Python，读懂一个 coding agent 到底怎么运作，再 fork 出你自己的。**
 
 *learn from it · fork it · ship something better*
 
@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
-[![engine](https://img.shields.io/badge/engine-2224_LoC-blue)](article/)
+[![engine](https://img.shields.io/badge/engine-2225_LoC-blue)](article/)
 [![源码导读](https://img.shields.io/badge/源码导读-8篇双语-orange)](article/)
 
 </div>
@@ -25,7 +25,7 @@
 
 | | CoreCoder | Claude Code | aider | nanoGPT |
 |---|---|---|---|---|
-| 代码量 | 引擎约 2224 行 / 整包 4855 行 | 几十万行（闭源） | 数万行 Python | 约 600 行（两个文件） |
+| 代码量 | 引擎约 2225 行 / 整包 4857 行 | 几十万行（闭源） | 数万行 Python | 约 600 行（两个文件） |
 | 读完要多久 | 一个下午 | 读不了（闭源） | 得啃几天 | 一个下午 |
 | 能不能下断点改了再跑 | 能，每一行 | 不能 | 能，但量大 | 能 |
 | 定位 | 读懂并 fork 出你自己的 agent | 生产级编程助手 | 终端结对编程 | 教学用最小 GPT |
@@ -36,7 +36,7 @@ nanoGPT 那一列是拿来对照的：它最小、可读，但教的是训一个
 
 我一直觉得 coding agent 被讲得太玄了。把 Claude Code、Cursor 这类工具扒到底，核心是一个 while 循环套着一个大模型，外加七八个让它能真正动手的工具。难的从来不是这个循环，而是循环跑进真实世界以后要兜的那些底。CoreCoder 就是把这个核心老老实实写出来的最小版本。
 
-引擎部分（循环、模型接口、上下文、工具、会话）去掉空行和注释是 2224 行。连最外层的 CLI、配置、打包一起算，整个包 29 个文件、物理 4855 行、净 4132 行。自 1161 行快照之后增加了 plan mode、hooks、checkpoints、请求预算、工具校验和用量账本等功能。
+引擎部分（循环、模型接口、上下文、工具、会话）去掉空行和注释是 2225 行。连最外层的 CLI、配置、打包一起算，整个包 29 个文件、物理 4857 行、净 4133 行。自 1161 行快照之后增加了 plan mode、hooks、checkpoints、请求预算、工具校验和用量账本等功能。
 
 它真能跑：读写文件、执行 shell、派子 agent、按请求预算归档并压缩上下文，还能随时把这趟烧掉的 token 和美元数报给你。任何要动你磁盘、要跑命令的调用，都会先停下来等你点头，回归测试覆盖了这些行为。但能跑不是为了劝你拿去日用，而是为了让这份「注释」不撒谎：一个解释 agent 怎么运作的范例，自己得真能运作。
 
@@ -95,7 +95,7 @@ Windows 在项目根目录运行 `.\start-web.ps1`，浏览器访问 <http://127
 
 ```
 corecoder/
-├── agent.py        agent 主循环 + 并行工具执行       389 行   ← 从这里开始读
+├── agent.py        agent 主循环 + 并行工具执行       408 行   ← 从这里开始读
 ├── llm.py          流式客户端 + 重试 + 成本统计       480 行
 ├── context.py      请求预算与证据压缩                     534 行
 ├── session.py      校验与原子存档 / 续聊              148 行
