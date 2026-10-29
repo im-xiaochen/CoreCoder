@@ -57,3 +57,5 @@
 ## 远端CI补充
 
 [PR #3](https://github.com/im-xiaochen/CoreCoder/pull/3) 的首轮CI发现既有接口测试 `test_web_snapshot_keeps_repeated_call_id_outcomes_in_order` 在英文Windows runner使用cp1252写入中文“保留”时抛出UnicodeEncodeError。失败发生在测试数据准备阶段；其他477项通过，1项跳过。已为该测试文件写入显式指定UTF-8，保持生产代码和断言不变，再由PR完整矩阵复验。前端CI、lint和打包首轮均通过。
+
+编码修正后，Windows/Linux全部版本与前端、lint、打包通过；macOS ARM64的Python 3.13也通过。但另两个macOS任务在长期排队后被GitHub取消，注释为“未能分配hosted runner”和“macOS arm64容量受限”，未进入测试步骤。根据[GitHub官方runner表](https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job)，将macOS矩阵固定为标准 `macos-15-intel`，保留Python 3.10–3.13四个版本、完整测试命令及失败门槛，重新执行整个PR CI。该调整验证macOS Intel，不等同于四版本ARM64覆盖；本次前端和纯Python改动没有增加架构相关代码。
