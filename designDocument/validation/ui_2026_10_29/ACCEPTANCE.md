@@ -53,3 +53,7 @@
 范围说明：中文输入法使用composition事件回归测试，未逐一测试Windows各输入法；断流恢复及过期响应保护经过代码审查，未执行真实网络拔线试验。手机检查为浏览器390px视口，不代表所有真机。截图中的模型回复记录了执行当时的依赖版本；最终依赖版本以package-lock.json为准。
 
 修复前截图与首次退回截图保留用于追溯；after-task.jpg和after-mobile.jpg为最终页面。所有提交均位于 `fix/workbench-ux-20261029`。本记录提交时远端PR/CI尚待运行；只有对应提交CI通过后才允许通过PR合并，实际结果以PR检查和合并记录为准。
+
+## 远端CI补充
+
+[PR #3](https://github.com/im-xiaochen/CoreCoder/pull/3) 的首轮CI发现既有接口测试 `test_web_snapshot_keeps_repeated_call_id_outcomes_in_order` 在英文Windows runner使用cp1252写入中文“保留”时抛出UnicodeEncodeError。失败发生在测试数据准备阶段；其他477项通过，1项跳过。已为该测试文件写入显式指定UTF-8，保持生产代码和断言不变，再由PR完整矩阵复验。前端CI、lint和打包首轮均通过。
