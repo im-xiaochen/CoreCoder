@@ -65,4 +65,6 @@ src/types.ts  前后端数据类型
 vite.config.ts 开发代理
 ```
 
-验证：`npm.cmd run build` 执行 TypeScript 检查和生产构建。接口测试说明见 [`web_backend/README.md`](../web_backend/README.md)。
+验证：`npm.cmd test` 运行草稿、提交、停止、IME、工具事件与 SSE 等行为回归测试；`npm.cmd run build` 执行 TypeScript 检查和生产构建。两项均已纳入 PR 的前端 CI。接口测试说明见 [`web_backend/README.md`](../web_backend/README.md)。
+
+输入草稿按工作区和对话保存在当前浏览器中。服务拒绝发送时保留原文；任务结束状态在刷新后仍可查看。窄屏侧栏和工作区面板可用遮罩或 Esc 关闭。

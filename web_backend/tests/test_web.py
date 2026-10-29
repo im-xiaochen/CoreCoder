@@ -199,7 +199,7 @@ def test_web_snapshot_keeps_repeated_call_id_outcomes_in_order(factory):
         LLMResponse(content="第二次完成。"),
     ]
     service = factory(script)
-    (service.workspace / "note.txt").write_text("保留")
+    (service.workspace / "note.txt").write_text("保留", encoding="utf-8")
     sid = service.create()["id"]
     until(service.start(sid, "read"), "done")
     until(service.start(sid, "write"), "done")
