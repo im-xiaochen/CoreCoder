@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,6 +54,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.documentElement.removeAttribute("style");
   delete document.documentElement.dataset.theme;
@@ -66,6 +68,22 @@ async function openSettings(user: ReturnType<typeof userEvent.setup>) {
 
 function stored(): Appearance {
   return JSON.parse(values.get(STORAGE_KEY)!);
+}
+
+function appearanceWrites() {
+  return vi.mocked(localStorage.setItem).mock.calls.filter(([key]) => key === STORAGE_KEY);
+}
+
+function storageEvent(newValue: string | null, key: string | null = STORAGE_KEY, storageArea: Storage | null = localStorage) {
+  const event = new StorageEvent("storage", { key, newValue });
+  // The mocked storage implements browser persistence, but jsdom's event
+  // constructor only accepts its own native Storage object in the initializer.
+  Object.defineProperty(event, "storageArea", { value: storageArea });
+  return event;
+}
+
+function dispatchStorage(newValue: string | null, key: string | null = STORAGE_KEY, storageArea: Storage | null = localStorage) {
+  act(() => { window.dispatchEvent(storageEvent(newValue, key, storageArea)); });
 }
 
 describe("workbench appearance settings", () => {
@@ -166,7 +184,7 @@ describe("workbench appearance settings", () => {
     await user.type(accent, "#12");
     await user.tab();
     expect(accent.getAttribute("aria-invalid")).toBe("true");
-    expect(stored().colors.accent).toBeNull();
+    expect(values.has(STORAGE_KEY)).toBe(false);
     await user.click(within(dialog).getByRole("button", { name: "恢复主题配色" }));
     expect((within(dialog).getByLabelText("强调色", { exact: true }) as HTMLInputElement).value).toBe("#4169c1");
     expect(within(dialog).queryByText(/未应用不完整的色值/)).toBeNull();
@@ -201,6 +219,12 @@ describe("workbench appearance settings", () => {
     await user.click(within(dialog).getByRole("button", { name: "科技风" }));
     expect(document.documentElement.dataset.theme).toBe("tech");
     expect(within(dialog).getByText(/无法|不可用|暂时|临时/)).toBeDefined();
+    vi.mocked(localStorage.setItem).mockImplementation((key: string, value: string) => {
+      values.set(key, value);
+    });
+    await user.click(within(dialog).getByRole("button", { name: "恢复全部默认" }));
+    expect(stored()).toEqual(DEFAULT_APPEARANCE);
+    expect(within(dialog).queryByText(/浏览器无法保存设置/)).toBeNull();
   });
 
   it("updates the open settings UI for appearance changes made in another browser tab", async () => {
@@ -209,9 +233,144 @@ describe("workbench appearance settings", () => {
     const dialog = await openSettings(user);
     const value: Appearance = { ...DEFAULT_APPEARANCE, preset: "fresh", fontScale: 110 };
     values.set(STORAGE_KEY, JSON.stringify(value));
-    act(() => { window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY, newValue: JSON.stringify(value) })); });
+    dispatchStorage(JSON.stringify(value));
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("fresh"));
     expect(within(dialog).getByRole("button", { name: "小清新" }).getAttribute("aria-pressed")).toBe("true");
     expect((within(dialog).getByLabelText("字号", { exact: true }) as HTMLInputElement).value).toBe("110");
+  });
+
+  it("does not echo an appearance update received from another tab back into shared storage", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openSettings(user);
+    vi.mocked(localStorage.setItem).mockClear();
+    const fresh: Appearance = { ...DEFAULT_APPEARANCE, preset: "fresh" };
+    values.set(STORAGE_KEY, JSON.stringify(fresh));
+    dispatchStorage(JSON.stringify(fresh));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("fresh"));
+    expect(appearanceWrites()).toHaveLength(0);
+    expect(stored()).toEqual(fresh);
+  });
+
+  it("converges on the latest shared preference when a stale appearance event is delivered", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openSettings(user);
+    vi.mocked(localStorage.setItem).mockClear();
+    const tech: Appearance = { ...DEFAULT_APPEARANCE, preset: "tech" };
+    const fresh: Appearance = { ...DEFAULT_APPEARANCE, preset: "fresh", fontScale: 110 };
+    // Both tabs wrote before this tab processed its queued storage event.
+    values.set(STORAGE_KEY, JSON.stringify(fresh));
+    dispatchStorage(JSON.stringify(tech));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("fresh"));
+    expect(stored()).toEqual(fresh);
+    expect(appearanceWrites()).toHaveLength(0);
+  });
+
+  it("does not overwrite a newer cross-tab preference with the snapshot read during mount", async () => {
+    const fresh: Appearance = { ...DEFAULT_APPEARANCE, preset: "fresh" };
+    let firstRead = true;
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) => {
+      if (key === STORAGE_KEY && firstRead) {
+        firstRead = false;
+        // Another tab writes after this tab's initial read, before its effects.
+        values.set(STORAGE_KEY, JSON.stringify(fresh));
+        return null;
+      }
+      return values.get(key) ?? null;
+    });
+    render(<App />);
+    await screen.findByLabelText("输入任务");
+    expect(stored()).toEqual(fresh);
+    expect(appearanceWrites()).toHaveLength(0);
+    dispatchStorage(JSON.stringify(fresh));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("fresh"));
+    expect(appearanceWrites()).toHaveLength(0);
+  });
+
+  it("writes once for a local change and never for effect replay in Strict Mode", async () => {
+    const user = userEvent.setup();
+    render(<StrictMode><App /></StrictMode>);
+    const dialog = await openSettings(user);
+    expect(appearanceWrites()).toHaveLength(0);
+    await user.click(within(dialog).getByRole("button", { name: "科技风" }));
+    expect(appearanceWrites()).toHaveLength(1);
+    expect(stored().preset).toBe("tech");
+    expect(document.documentElement.dataset.theme).toBe("tech");
+    const fresh: Appearance = { ...DEFAULT_APPEARANCE, preset: "fresh" };
+    values.set(STORAGE_KEY, JSON.stringify(fresh));
+    dispatchStorage(JSON.stringify(fresh));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("fresh"));
+    expect(appearanceWrites()).toHaveLength(1);
+  });
+
+  it("settles both app instances on the last shared write when tab events are delivered out of order", async () => {
+    const subscribe = vi.spyOn(window, "addEventListener");
+    const first = render(<App />);
+    await within(first.container).findByLabelText("输入任务");
+    const second = render(<App />);
+    await within(second.container).findByLabelText("输入任务");
+    const listeners = subscribe.mock.calls
+      .filter(([name]) => name === "storage")
+      .map(([, listener]) => listener as EventListener);
+    expect(listeners).toHaveLength(2);
+    fireEvent.click(within(first.container).getByRole("button", { name: "设置" }));
+    fireEvent.click(within(second.container).getByRole("button", { name: "设置" }));
+    vi.mocked(localStorage.setItem).mockClear();
+
+    // Writes are delivered immediately to shared storage; cross-tab events wait.
+    fireEvent.click(within(first.container).getByRole("button", { name: "科技风" }));
+    const tech = values.get(STORAGE_KEY)!;
+    fireEvent.click(within(second.container).getByRole("button", { name: "小清新" }));
+    const fresh = values.get(STORAGE_KEY)!;
+    expect(appearanceWrites()).toHaveLength(2);
+
+    // Deliver A's older event to B after B has already written fresh, then send
+    // B's event to A. Repeat a delayed old event to ensure it cannot restart echo.
+    for (const [listener, value] of [[listeners[1], tech], [listeners[0], fresh], [listeners[0], tech], [listeners[1], tech]] as const) {
+      act(() => { listener(storageEvent(value)); });
+    }
+    await waitFor(() => {
+      for (const view of [first, second]) {
+        expect(within(view.container).getByRole("button", { name: "小清新" }).getAttribute("aria-pressed")).toBe("true");
+      }
+    });
+    expect(values.get(STORAGE_KEY)).toBe(fresh);
+    expect(appearanceWrites()).toHaveLength(2);
+  });
+
+  it.each(["unrelated-key", "session-storage"])("ignores an %s event even if a newer preference is waiting in shared storage", async (source) => {
+    const user = userEvent.setup();
+    render(<App />);
+    const dialog = await openSettings(user);
+    await user.click(within(dialog).getByRole("button", { name: "科技风" }));
+    vi.mocked(localStorage.setItem).mockClear();
+    vi.mocked(localStorage.getItem).mockClear();
+    const fresh: Appearance = { ...DEFAULT_APPEARANCE, preset: "fresh" };
+    values.set(STORAGE_KEY, JSON.stringify(fresh));
+    dispatchStorage(JSON.stringify(fresh), source === "unrelated-key" ? "another-preference" : STORAGE_KEY,
+      source === "session-storage" ? sessionStorage : localStorage);
+    expect(within(dialog).getByRole("button", { name: "科技风" }).getAttribute("aria-pressed")).toBe("true");
+    expect(vi.mocked(localStorage.getItem).mock.calls.filter(([key]) => key === STORAGE_KEY)).toHaveLength(0);
+    expect(appearanceWrites()).toHaveLength(0);
+    expect(stored()).toEqual(fresh);
+  });
+
+  it.each(["remove-item", "clear", "invalid-json", "stale-event-after-remove"])("falls back without writing when current shared appearance is %s", async (change) => {
+    const tech: Appearance = { ...DEFAULT_APPEARANCE, preset: "tech" };
+    values.set(STORAGE_KEY, JSON.stringify(tech));
+    render(<App />);
+    await screen.findByLabelText("输入任务");
+    expect(document.documentElement.dataset.theme).toBe("tech");
+    vi.mocked(localStorage.setItem).mockClear();
+    if (change === "clear") values.clear();
+    else if (change === "invalid-json") values.set(STORAGE_KEY, "{broken json");
+    else values.delete(STORAGE_KEY);
+    const current = values.get(STORAGE_KEY);
+    const eventValue = change === "stale-event-after-remove" ? JSON.stringify(tech) : current ?? null;
+    dispatchStorage(eventValue, change === "clear" ? null : STORAGE_KEY);
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("classic"));
+    expect(values.get(STORAGE_KEY)).toBe(current);
+    expect(appearanceWrites()).toHaveLength(0);
   });
 });
