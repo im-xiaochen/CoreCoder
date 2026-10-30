@@ -54,6 +54,15 @@ import {
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { api, chat, setToken } from "./api";
+import AppearanceSettings from "./AppearanceSettings";
+import {
+  applyAppearance,
+  normalizeAppearance,
+  readAppearance,
+  saveAppearance,
+  STORAGE_KEY,
+  type Appearance,
+} from "./appearance";
 import type {
   Bootstrap,
   Change,
@@ -135,12 +144,14 @@ function Dialog({
   children,
   onClose,
   wide = false,
+  className = "",
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  className?: string;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -180,7 +191,7 @@ function Dialog({
       <div
         ref={dialog}
         tabIndex={-1}
-        className={`dialog ${wide ? "wide" : ""}`}
+        className={`dialog ${wide ? "wide" : ""} ${className}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -337,6 +348,25 @@ export default function App() {
   const [dialog, setDialog] = useState<
     "settings" | "history" | "help" | "reset" | null
   >(null);
+  const [settingsTab, setSettingsTab] = useState<"appearance" | "model">("appearance");
+  const [appearance, setAppearance] = useState<Appearance>(readAppearance);
+  const [appearanceStorageAvailable, setAppearanceStorageAvailable] = useState(true);
+  useEffect(() => {
+    applyAppearance(appearance);
+    setAppearanceStorageAvailable(saveAppearance(appearance));
+  }, [appearance]);
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== STORAGE_KEY) return;
+      try {
+        setAppearance(normalizeAppearance(JSON.parse(event.newValue ?? "null")));
+      } catch {
+        setAppearance(normalizeAppearance(null));
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
   const [permission, setPermission] = useState<Permission | null>(null);
   const [busy, setBusy] = useState(false);
   const [pendingAction, setPendingAction] = useState(false);
@@ -672,6 +702,7 @@ export default function App() {
       draftRef.current = "";
       sendingRef.current = false;
       setSending(false);
+      setSettingsTab("model");
       setDialog("settings");
       return;
     }
@@ -939,7 +970,10 @@ export default function App() {
             <ShieldCheck size={16} />
           </div>
           <div className="sidebar-footer">
-            <button onClick={() => setDialog("settings")}>
+            <button onClick={() => {
+              setSettingsTab("appearance");
+              setDialog("settings");
+            }}>
               <Settings2 size={16} />
               设置
             </button>
@@ -1412,6 +1446,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => {
+                            setSettingsTab("model");
                             setDialog("settings");
                             setModelMenu(false);
                           }}
@@ -1737,99 +1772,158 @@ export default function App() {
       {dialog === "settings" && (
         <Dialog
           title="工作台设置"
-          subtitle="模型在后端运行，API Key 始终留在本机。"
+          subtitle="调整工作台外观，管理模型与工具。"
           onClose={closeDialog}
+          className="appearance-dialog"
         >
-          <div className="settings-section">
-            <div className="settings-label">
-              <FolderOpen size={16} />
-              工作区
-            </div>
-            <code className="setting-code">{boot?.workspace}</code>
-          </div>
-          <div className="settings-section">
-            <div className="settings-label">
-              <Code2 size={16} />
-              当前会话模型
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void action("model", { model: modelDraft });
-              }}
-              className="model-form"
-            >
-              <input
-                aria-label="自定义模型名称"
-                value={modelDraft}
-                onChange={(e) => setModelDraft(e.target.value)}
-                placeholder="输入当前接口支持的模型名称"
-              />
-              <button
-                className="button primary"
-                disabled={idleDisabled || !modelDraft.trim()}
-              >
-                应用
-              </button>
-            </form>
-            <p className="field-hint">
-              这里只切换模型名称；接口地址和密钥从项目 .env 读取。
-            </p>
-          </div>
-          <div className="settings-facts">
-            <div>
-              <span>接口后端</span>
-              <strong>
-                {boot?.provider === "litellm" ? "LiteLLM" : "OpenAI 兼容接口"}
-              </strong>
-            </div>
-            <div>
-              <span>API 地址</span>
-              <code>{boot?.base_url || "默认接口"}</code>
-            </div>
-            <div>
-              <span>API Key</span>
-              <strong
-                className={
-                  boot?.key_configured ? "success-text" : "warning-text"
-                }
-              >
-                {boot?.key_configured
-                  ? "已配置 · 内容不展示"
-                  : "未配置，请填写 .env 并重启服务"}
-              </strong>
-            </div>
-          </div>
-          <div className="settings-section">
-            <div className="settings-label">
-              <ShieldCheck size={16} />
-              工具授权
-            </div>
-            <p className="field-hint">
-              读取和搜索直接执行，文件修改、命令与子任务先询问。持续允许只对当前网页会话生效。
-            </p>
-            <div className="allowed-tools">
-              {session?.allowed_tools.length ? (
-                session.allowed_tools.map((name) => (
-                  <span key={name}>{toolNames[name] || name}</span>
-                ))
-              ) : (
-                <span className="muted">尚未持续允许任何工具</span>
-              )}
-            </div>
+          <div
+            className="settings-tabs"
+            role="tablist"
+            aria-label="设置分类"
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
+                return;
+              event.preventDefault();
+              const next = event.key === "Home"
+                ? "appearance"
+                : event.key === "End"
+                  ? "model"
+                  : settingsTab === "appearance" ? "model" : "appearance";
+              setSettingsTab(next);
+              event.currentTarget
+                .querySelector<HTMLButtonElement>(`#settings-tab-${next}`)
+                ?.focus();
+            }}
+          >
             <button
-              className="button secondary"
-              disabled={idleDisabled || !session?.allowed_tools.length}
-              onClick={() => action("revoke")}
+              type="button"
+              role="tab"
+              id="settings-tab-appearance"
+              aria-selected={settingsTab === "appearance"}
+              aria-controls="settings-panel-appearance"
+              tabIndex={settingsTab === "appearance" ? 0 : -1}
+              onClick={() => setSettingsTab("appearance")}
+            >外观</button>
+            <button
+              type="button"
+              role="tab"
+              id="settings-tab-model"
+              aria-selected={settingsTab === "model"}
+              aria-controls="settings-panel-model"
+              tabIndex={settingsTab === "model" ? 0 : -1}
+              onClick={() => setSettingsTab("model")}
+            >模型与工具</button>
+          </div>
+          {settingsTab === "appearance" ? (
+            <div
+              role="tabpanel"
+              id="settings-panel-appearance"
+              aria-labelledby="settings-tab-appearance"
             >
-              清除持续授权
-            </button>
-          </div>
-          <div className="settings-footer">
-            <Brand small />
-            <span>CoreCoder Workbench</span>
-            <small>v{boot?.version}</small>
-          </div>
+              <AppearanceSettings
+                value={appearance}
+                onChange={setAppearance}
+                storageAvailable={appearanceStorageAvailable}
+              />
+            </div>
+          ) : (
+            <div
+              role="tabpanel"
+              id="settings-panel-model"
+              aria-labelledby="settings-tab-model"
+            >
+              <div className="settings-section">
+                <div className="settings-label">
+                  <FolderOpen size={16} />
+                  工作区
+                </div>
+                <code className="setting-code">{boot?.workspace}</code>
+              </div>
+              <div className="settings-section">
+                <div className="settings-label">
+                  <Code2 size={16} />
+                  当前会话模型
+                </div>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void action("model", { model: modelDraft });
+                  }}
+                  className="model-form"
+                >
+                  <input
+                    aria-label="自定义模型名称"
+                    value={modelDraft}
+                    onChange={(e) => setModelDraft(e.target.value)}
+                    placeholder="输入当前接口支持的模型名称"
+                  />
+                  <button
+                    className="button primary"
+                    disabled={idleDisabled || !modelDraft.trim()}
+                  >
+                    应用
+                  </button>
+                </form>
+                <p className="field-hint">
+                  这里只切换模型名称；接口地址和密钥从项目 .env 读取。
+                </p>
+              </div>
+              <div className="settings-facts">
+                <div>
+                  <span>接口后端</span>
+                  <strong>
+                    {boot?.provider === "litellm" ? "LiteLLM" : "OpenAI 兼容接口"}
+                  </strong>
+                </div>
+                <div>
+                  <span>API 地址</span>
+                  <code>{boot?.base_url || "默认接口"}</code>
+                </div>
+                <div>
+                  <span>API Key</span>
+                  <strong
+                    className={
+                      boot?.key_configured ? "success-text" : "warning-text"
+                    }
+                  >
+                    {boot?.key_configured
+                      ? "已配置 · 内容不展示"
+                      : "未配置，请填写 .env 并重启服务"}
+                  </strong>
+                </div>
+              </div>
+              <div className="settings-section">
+                <div className="settings-label">
+                  <ShieldCheck size={16} />
+                  工具授权
+                </div>
+                <p className="field-hint">
+                  读取和搜索直接执行，文件修改、命令与子任务先询问。持续允许只对当前网页会话生效。
+                </p>
+                <div className="allowed-tools">
+                  {session?.allowed_tools.length ? (
+                    session.allowed_tools.map((name) => (
+                      <span key={name}>{toolNames[name] || name}</span>
+                    ))
+                  ) : (
+                    <span className="muted">尚未持续允许任何工具</span>
+                  )}
+                </div>
+                <button
+                  className="button secondary"
+                  disabled={idleDisabled || !session?.allowed_tools.length}
+                  onClick={() => action("revoke")}
+                >
+                  清除持续授权
+                </button>
+              </div>
+              <div className="settings-footer">
+                <Brand small />
+                <span>CoreCoder Workbench</span>
+                <small>v{boot?.version}</small>
+              </div>
+            </div>
+          )}
         </Dialog>
       )}
       {dialog === "history" && (
