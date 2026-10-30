@@ -353,16 +353,24 @@ export default function App() {
   const [appearanceStorageAvailable, setAppearanceStorageAvailable] = useState(true);
   useEffect(() => {
     applyAppearance(appearance);
-    setAppearanceStorageAvailable(saveAppearance(appearance));
   }, [appearance]);
+  const changeAppearance = useCallback((value: Appearance) => {
+    const next = normalizeAppearance(value);
+    setAppearance(next);
+    setAppearanceStorageAvailable(saveAppearance(next));
+  }, []);
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== null && event.key !== STORAGE_KEY) return;
       try {
-        setAppearance(normalizeAppearance(JSON.parse(event.newValue ?? "null")));
+        if (event.storageArea !== null && event.storageArea !== localStorage)
+          return;
       } catch {
-        setAppearance(normalizeAppearance(null));
+        return;
       }
+      // Events may be queued behind newer writes. Read the current shared value
+      // without echoing it back, so tabs converge on the latest saved preference.
+      setAppearance(readAppearance());
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -1822,7 +1830,7 @@ export default function App() {
             >
               <AppearanceSettings
                 value={appearance}
-                onChange={setAppearance}
+                onChange={changeAppearance}
                 storageAvailable={appearanceStorageAvailable}
               />
             </div>
