@@ -6,7 +6,7 @@ from contextlib import nullcontext
 
 from .context import ContextBudgetExceeded, ContextManager, outcome_status, output_reserve_for
 from .permissions import Permission
-from .prompt import PLAN_MODE_PROMPT, system_prompt
+from .prompt import CHAT_MODE_PROMPT, PLAN_MODE_PROMPT, system_prompt
 from .results import RunResult
 from .state import SessionState
 from .tools import create_tools
@@ -49,6 +49,7 @@ class Agent:
         self.messages, self.context = [], ContextManager(max_tokens=max_context_tokens)
         self.max_rounds, self._system = max_rounds, system_prompt(self.tools, self.state)
         self.plan_mode = False
+        self.chat_mode = False
         self._tool_execution_cwds, self._tool_result_cache = {}, {}
         self.last_result = None
         self._interrupt_seen = False
@@ -58,6 +59,8 @@ class Agent:
         self._todo = next((t for t in self.tools if isinstance(t, TodoWriteTool)), None)
 
     def _full_messages(self):
+        if self.chat_mode:
+            return [{"role": "system", "content": CHAT_MODE_PROMPT}] + self.messages
         system = system_prompt(self.tools, self.state)
         if self.plan_mode:
             system += "\n\n" + PLAN_MODE_PROMPT
@@ -68,6 +71,8 @@ class Agent:
         return [{"role": "system", "content": system}] + self.messages
 
     def _tool_schemas(self):
+        if self.chat_mode:
+            return []
         return [t.schema() for t in self.tools]
 
     @staticmethod
@@ -89,6 +94,17 @@ class Agent:
     def _run_tool_call(self, tc, on_tool=None):
         name, args = getattr(tc, "name", ""), getattr(tc, "arguments", None)
         self._tool_execution_cwds[tc.id] = self.state.cwd
+        # A provider may still send a tool call even when none were offered.
+        # Refuse before callbacks, hooks, permissions, or any tool code runs.
+        if self.chat_mode:
+            outcome = ToolOutcome(
+                tc.id, name, "refused",
+                "Chat mode is on, so this call was refused: no tools are available. "
+                "Do not retry it. Ask the user to select plan or code mode if project access is needed.",
+                "permission",
+            )
+            self._tool_result_cache[tc.id] = outcome
+            return outcome
         tool = self._tool_by_name.get(name)
         if tool is None:
             outcome = ToolOutcome(tc.id, name, "failed", f"Error: unknown_tool: unknown tool '{name}'", "validate")
