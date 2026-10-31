@@ -55,6 +55,7 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { api, chat, setToken } from "./api";
 import AppearanceSettings from "./AppearanceSettings";
+import ModeMenu, { sessionMode } from "./ModeMenu";
 import {
   applyAppearance,
   normalizeAppearance,
@@ -390,6 +391,11 @@ export default function App() {
   } | null>(null);
   const [modelDraft, setModelDraft] = useState("");
   const [modelMenu, setModelMenu] = useState(false);
+  const [modeMenu, setModeMenu] = useState(false);
+  const changeModeMenu = useCallback((open: boolean) => {
+    setModeMenu(open);
+    if (open) setModelMenu(false);
+  }, []);
   const [moreMenu, setMoreMenu] = useState(false);
   const [changes, setChanges] = useState<Change[]>([]);
   const [saved, setSaved] = useState<
@@ -686,7 +692,7 @@ export default function App() {
       },
       "/reset": () => setDialog("reset"),
       "/plan": () => {
-        void action("plan", { enabled: !current.plan_mode });
+        void action("mode", { mode: sessionMode(current) === "plan" ? "code" : "plan" });
       },
     };
     if (commands[prompt]) {
@@ -721,16 +727,17 @@ export default function App() {
       return;
     }
     if (
-      current.plan_mode &&
+      sessionMode(current) === "plan" &&
       ["approve", "/approve"].includes(prompt.toLowerCase())
     ) {
       sendingRef.current = false;
       setSending(false);
-      if (!(await action("plan", { enabled: false }))) return;
+      if (!(await action("mode", { mode: "code" }))) return;
       sendingRef.current = true;
       setSending(true);
     }
-    const id = current.id;
+    const runSession = sessionRef.current ?? current;
+    const id = runSession.id;
     let accepted = false;
     try {
       await chat(
@@ -770,10 +777,10 @@ export default function App() {
         () => {
           accepted = true;
           const optimistic = {
-            ...current,
+            ...runSession,
             busy: true,
             messages: [
-              ...current.messages,
+              ...runSession.messages,
               { role: "user" as const, content: prompt },
             ],
           };
@@ -872,6 +879,11 @@ export default function App() {
   );
   const idleDisabled =
     busy || pendingAction || sending || initializing || !!connectionError;
+  const mode = sessionMode(session);
+  useEffect(() => {
+    setModeMenu(false);
+    setModelMenu(false);
+  }, [session?.id, idleDisabled]);
   const closeDialog = useCallback(() => setDialog(null), []);
 
   const liveToolViews = mergeToolEvents(liveTools);
@@ -1292,14 +1304,20 @@ export default function App() {
               </div>
             </section>
           )}
-          {session?.plan_mode && (
+          {mode === "chat" && (
+            <div className="chat-banner">
+              <MessageSquare size={14} />
+              <span>聊天模式 · 只基于对话回答，不读取项目文件或调用工具。</span>
+            </div>
+          )}
+          {mode === "plan" && (
             <div className="plan-banner">
               <ListChecks size={14} />
               <span>计划模式 · 先探索和规划，文件修改与命令执行将被拒绝。</span>
               <button
                 disabled={idleDisabled}
                 onClick={async () => {
-                  if (await action("plan", { enabled: false })) {
+                  if (await action("mode", { mode: "code" })) {
                     setDraft("approve");
                     draftRef.current = "approve";
                     textarea.current?.focus();
@@ -1311,7 +1329,7 @@ export default function App() {
               </button>
             </div>
           )}
-          {empty && !initializing && (
+          {empty && !initializing && mode !== "chat" && (
             <div className="suggestions">
               {[
                 {
@@ -1367,9 +1385,11 @@ export default function App() {
               ref={textarea}
               aria-label="输入任务"
               placeholder={
-                session?.plan_mode
-                  ? "描述你的目标，让 CoreCoder 先制定计划…"
-                  : "描述任务、提出问题，或输入 / 查看命令…"
+                mode === "chat"
+                  ? "提出问题或聊聊想法，聊天模式不会调用工具…"
+                  : mode === "plan"
+                    ? "描述你的目标，让 CoreCoder 先制定计划…"
+                    : "描述任务、提出问题，或输入 / 查看命令…"
               }
               value={draft}
               rows={2}
@@ -1394,29 +1414,19 @@ export default function App() {
             />
             <div className="composer-toolbar">
               <div className="composer-options">
-                <button
-                  type="button"
-                  className={`mode-button ${session?.plan_mode ? "plan" : ""}`}
-                  disabled={idleDisabled}
-                  onClick={() =>
-                    action("plan", { enabled: !session?.plan_mode })
-                  }
-                >
-                  {session?.plan_mode ? (
-                    <ListChecks size={15} />
-                  ) : (
-                    <Code2 size={15} />
-                  )}
-                  <span>{session?.plan_mode ? "计划模式" : "编程模式"}</span>
-                  <ChevronDown size={12} />
-                </button>
+                <ModeMenu mode={mode} open={modeMenu} disabled={idleDisabled}
+                  onOpenChange={changeModeMenu}
+                  onSelect={(next) => { void action("mode", { mode: next }); }} />
                 <div className="toolbar-divider" />
                 <div className="menu-anchor">
                   <button
                     type="button"
                     className="model-button"
                     disabled={idleDisabled}
-                    onClick={() => setModelMenu(!modelMenu)}
+                    onClick={() => {
+                      setModeMenu(false);
+                      setModelMenu(!modelMenu);
+                    }}
                   >
                     <span className="model-dot" />
                     {session?.model || boot?.model || "选择模型"}
@@ -1501,7 +1511,9 @@ export default function App() {
                 ? "正在停止，等待当前步骤安全结束"
                 : busy
                   ? "任务运行中，可以停止后续步骤"
-                  : "修改前询问 · 本地工作区"}
+                  : mode === "chat"
+                    ? "只基于对话回答 · 不调用工具"
+                    : "修改前询问 · 本地工作区"}
             </span>
             <span>
               <CornerDownLeft size={11} />
@@ -1985,6 +1997,10 @@ export default function App() {
         >
           <div className="help-grid">
             {[
+              [
+                "聊天模式",
+                "点击输入框下方的模式菜单选择。只基于对话回答，不读取项目文件或调用工具。",
+              ],
               [
                 "编程模式",
                 "直接描述任务。Agent 会读取代码，并在修改或运行命令前请求许可。",

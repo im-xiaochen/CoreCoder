@@ -1,0 +1,58 @@
+.mode-dropdown {
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: min(310px, calc(100vw - 48px));
+  min-width: 0;
+  max-height: min(280px, calc(100dvh - 140px));
+  overflow-y: auto;
+}
+.mode-dropdown > button {
+  gap: 10px;
+  padding: 10px;
+  min-height: 58px;
+}
+.mode-dropdown > button[aria-checked="true"] {
+  background: var(--selected);
+  color: var(--text);
+}
+.mode-dropdown > button > svg:first-child {
+  flex-shrink: 0;
+}
+.mode-dropdown > button > span {
+  min-width: 0;
+}
+.mode-dropdown strong,
+.mode-dropdown small {
+  display: block;
+  line-height: 1.5;
+}
+.mode-dropdown strong {
+  font-size: 0.8rem;
+  color: var(--text);
+  font-weight: 550;
+}
+.mode-dropdown small {
+  margin-top: 2px;
+  font-size: 0.733333rem;
+  color: var(--muted);
+}
+.mode-button.chat {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.chat-banner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--info-line);
+  border-radius: 8px;
+  color: var(--info);
+  background: var(--info-soft);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.chat-banner > svg {
+  flex-shrink: 0;
+}

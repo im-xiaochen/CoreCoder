@@ -183,6 +183,7 @@ def outcome_status(text: str = "", explicit: str | None = None) -> str:
             "blocked by hook",
             "plan mode refusal",
             "plan mode is on, so this call was refused",
+            "chat mode is on, so this call was refused",
             "⚠blocked",
             "⚠ blocked",
         )

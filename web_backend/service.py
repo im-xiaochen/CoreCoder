@@ -262,8 +262,18 @@ class WebSession:
             else:
                 self.agent.llm.total_prompt_tokens = old_prompt
                 self.agent.llm.total_completion_tokens = old_completion
-        self.agent.plan_mode = bool(data.get("plan_mode", False))
+        self.set_mode(data.get("mode", "plan" if data.get("plan_mode", False) else "code"))
         self.agent._todo.execute(data.get("tasks", []))
+
+    @property
+    def mode(self):
+        return "chat" if self.agent.chat_mode else "plan" if self.agent.plan_mode else "code"
+
+    def set_mode(self, mode):
+        if not isinstance(mode, str) or mode not in {"chat", "plan", "code"}:
+            raise ValueError("请选择聊天、计划或编程模式。")
+        self.agent.chat_mode = mode == "chat"
+        self.agent.plan_mode = mode == "plan"
 
     def check_cancelled(self):
         if self.cancel.is_set():
@@ -330,6 +340,7 @@ class WebSession:
                 ],
             ],
             "cwd": self.cwd,
+            "mode": self.mode,
             "plan_mode": self.agent.plan_mode,
             "tasks": self.agent._todo._tasks,
             "pending_permission": self.pending_permission,
@@ -571,8 +582,13 @@ class Service:
         try:
             action = data.get("action")
             notice = ""
-            if action == "plan":
-                session.agent.plan_mode = bool(data.get("enabled"))
+            if action == "mode":
+                try:
+                    session.set_mode(data.get("mode"))
+                except ValueError as exc:
+                    raise RequestError(str(exc)) from exc
+            elif action == "plan":
+                session.set_mode("plan" if data.get("enabled") else "code")
             elif action == "model":
                 model = str(data.get("model", "")).strip()
                 if not model or len(model) > 200:

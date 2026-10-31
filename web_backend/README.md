@@ -23,7 +23,9 @@ python -m web_backend.server --port 8765 --open
 | POST | `/api/chat` | `{id, prompt}`，返回 SSE 流 |
 | POST | `/api/approve` | `{id, permission_id, answer}`，answer 为 once / always / deny |
 | POST | `/api/stop` | `{id}`，取消后续步骤 |
-| POST | `/api/action` | `{id, action, …}`：plan / model / save / import / compact / undo / reset / revoke |
+| POST | `/api/action` | `{id, action, …}`：mode / plan / model / save / import / compact / undo / reset / revoke |
+
+模式选择使用 `{id, action: "mode", mode: "chat" | "plan" | "code"}`。默认编程模式；聊天模式只基于对话回答，不提供或执行任何工具，也不会运行工具 Hooks 或请求工具授权；计划模式允许只读调查；编程模式沿用现有工具授权。任务运行期间不能切换模式（409）。会话快照和存档包含 `mode`，同时保留 `plan_mode` 兼容字段。旧存档按 `plan_mode` 还原；旧 `action: "plan"` 仍在启用时进入计划模式，关闭时进入编程模式。
 
 POST 需要 `Content-Type: application/json` 和 `X-CoreCoder-Token`（来自 bootstrap）。流事件包含 `started`、`token`、`reasoning`、`tool_start`、`tool_result`、`permission`、`notice`、`run_result`、`error`、`complete`，最后以 `snapshot` 和 `done` 结束。
 

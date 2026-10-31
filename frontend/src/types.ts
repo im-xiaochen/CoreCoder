@@ -66,12 +66,15 @@ export interface Permission {
   name: string;
   arguments: Record<string, unknown>;
 }
+export type SessionMode = "chat" | "plan" | "code";
 export interface Session extends SessionSummary {
   messages: Message[];
   timeline: ToolEvent[];
   tool_outcomes: { call_id: string | null; status: ToolStatus }[];
   cwd: string;
   plan_mode: boolean;
+  /** Older server snapshots only include plan_mode. */
+  mode?: SessionMode;
   tasks: { content: string; status: "pending" | "in_progress" | "done" }[];
   pending_permission: Permission | null;
   allowed_tools: string[];

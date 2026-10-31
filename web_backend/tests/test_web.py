@@ -126,6 +126,138 @@ def test_plan_refuses_mutation_without_permission_dialog(factory):
     assert "Plan mode is on" in service.get(sid).agent.messages[2]["content"]
 
 
+def test_mode_switches_are_exclusive_and_legacy_plan_action_still_works(factory):
+    service = factory()
+    sid = service.create()["id"]
+    session = service.get(sid)
+    assert session.snapshot()["mode"] == "code"
+    for mode in ("chat", "plan", "code", "plan", "chat"):
+        snapshot = service.action(sid, {"action": "mode", "mode": mode})["session"]
+        assert snapshot["mode"] == mode
+        assert snapshot["plan_mode"] is (mode == "plan")
+        assert session.agent.chat_mode is (mode == "chat")
+        assert bool(session.agent._tool_schemas()) is (mode != "chat")
+    assert service.action(sid, {"action": "plan", "enabled": True})["session"]["mode"] == "plan"
+    assert service.action(sid, {"action": "plan", "enabled": False})["session"]["mode"] == "code"
+
+
+@pytest.mark.parametrize("mode", [None, True, 0, [], {}, "", "CHAT", "write"])
+def test_invalid_mode_is_a_bad_request_without_changing_session(factory, mode):
+    service = factory()
+    sid = service.create()["id"]
+    service.action(sid, {"action": "mode", "mode": "chat"})
+    with pytest.raises(RequestError) as error:
+        service.action(sid, {"action": "mode", "mode": mode})
+    assert error.value.status == 400
+    assert service.get(sid).snapshot()["mode"] == "chat"
+    assert factory().get(sid).snapshot()["mode"] == "chat"
+
+
+def test_busy_session_cannot_switch_mode(factory):
+    service = factory(write_script())
+    sid = service.create()["id"]
+    events = service.start(sid, "write a note")
+    permission, _ = until(events, "permission")
+    try:
+        with pytest.raises(RequestError) as error:
+            service.action(sid, {"action": "mode", "mode": "chat"})
+        assert error.value.status == 409
+        assert service.get(sid).snapshot()["mode"] == "code"
+    finally:
+        service.approve(sid, permission["id"], "deny")
+        until(events, "done")
+
+
+@pytest.mark.parametrize("mode", ["chat", "plan", "code"])
+def test_mode_is_persisted_and_authoritative_over_legacy_flag(factory, mode):
+    service = factory()
+    sid = service.create()["id"]
+    service.action(sid, {"action": "mode", "mode": mode})
+    path = service.store / f"{sid}.json"
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["mode"] == mode
+    stored["plan_mode"] = mode != "plan"
+    path.write_text(json.dumps(stored), encoding="utf-8")
+    restored = factory().get(sid)
+    assert restored.snapshot()["mode"] == mode
+    assert restored.agent.plan_mode is (mode == "plan")
+    assert restored.agent.chat_mode is (mode == "chat")
+
+
+@pytest.mark.parametrize("plan_mode", [True, False])
+def test_legacy_sessions_restore_their_mode(factory, plan_mode):
+    service = factory()
+    sid = service.create()["id"]
+    path = service.store / f"{sid}.json"
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    del stored["mode"]
+    stored["plan_mode"] = plan_mode
+    path.write_text(json.dumps(stored), encoding="utf-8")
+    restored = factory().get(sid)
+    assert restored.snapshot()["mode"] == ("plan" if plan_mode else "code")
+    assert restored.agent.chat_mode is False
+
+
+def test_chat_refuses_tool_calls_without_hooks_or_permission_and_emits_outcome_once(factory):
+    service = factory([
+        LLMResponse(tool_calls=[
+            ToolCall("read", "read_file", {"file_path": "private.txt"}),
+            ToolCall("write", "write_file", {"file_path": "note.txt", "content": "no"}),
+            ToolCall("child", "agent", {"task": "write a file"}),
+        ]),
+        LLMResponse(content="请选择计划或编程模式以访问项目。"),
+    ])
+    sid = service.create()["id"]
+    session = service.get(sid)
+    service.action(sid, {"action": "mode", "mode": "chat"})
+
+    class NoHooks:
+        def run_pre(self, *args, **kwargs):
+            raise AssertionError("chat must not run hooks")
+
+        def run_post(self, *args, **kwargs):
+            raise AssertionError("chat must not run hooks")
+
+    session.agent.hooks = NoHooks()
+    _, received = until(service.start(sid, "读取并修改项目"), "done")
+    assert not any(event["type"] in {"permission", "tool_start", "error"} for event in received)
+    results = [event for event in received if event["type"] == "tool_result"]
+    assert len(results) == 3
+    assert {event["id"] for event in results} == {"read", "write", "child"}
+    assert all(event["status"] == "refused" and event["refused"] for event in results)
+    assert len(session.state.execution_records) == 3
+    assert list(service.workspace.iterdir()) == []
+    assert any(event["type"] == "token" for event in received)
+    assert next(event for event in received if event["type"] == "snapshot")["session"]["mode"] == "chat"
+    assert factory().get(sid).snapshot()["mode"] == "chat"
+
+
+def test_leaving_chat_restores_plan_reads_and_code_approval(factory):
+    service = factory([
+        LLMResponse(content="先讨论。"),
+        LLMResponse(tool_calls=[ToolCall("read", "read_file", {"file_path": "source.txt"})]),
+        LLMResponse(content="读完了，可以制定计划。"),
+        LLMResponse(tool_calls=[ToolCall("write", "write_file", {"file_path": "created.txt", "content": "approved"})]),
+        LLMResponse(content="已执行。"),
+    ])
+    (service.workspace / "source.txt").write_text("project source", encoding="utf-8")
+    sid = service.create()["id"]
+    service.action(sid, {"action": "mode", "mode": "chat"})
+    until(service.start(sid, "讨论一下"), "done")
+    service.action(sid, {"action": "mode", "mode": "plan"})
+    _, read_events = until(service.start(sid, "查看项目"), "done")
+    assert not any(event["type"] == "permission" for event in read_events)
+    read = next(event for event in read_events if event["type"] == "tool_result")
+    assert read["status"] == "succeeded" and "project source" in read["result"]
+    service.action(sid, {"action": "mode", "mode": "code"})
+    events = service.start(sid, "执行计划")
+    permission, _ = until(events, "permission")
+    assert not (service.workspace / "created.txt").exists()
+    service.approve(sid, permission["id"], "once")
+    until(events, "done")
+    assert (service.workspace / "created.txt").read_text(encoding="utf-8") == "approved"
+
+
 def test_denied_write_never_executes(factory):
     service = factory(write_script())
     sid = service.create()["id"]
@@ -329,6 +461,31 @@ def test_http_chat_sse_completes_and_exposes_final_snapshot(http_server):
     assert events[-1]["type"] == "done"
     assert "streamed response" == next(e for e in events if e["type"] == "token")["text"]
     assert next(e for e in events if e["type"] == "snapshot")["session"]["busy"] is False
+
+
+def test_http_mode_selection_and_chat_stream_keep_mode_in_snapshot(http_server):
+    service, port = http_server
+    sid = service.create()["id"]
+    headers = {"Content-Type": "application/json", "X-CoreCoder-Token": service.token}
+    status, payload = request(port, "POST", "/api/action", {"id": sid, "action": "mode", "mode": "chat"}, headers)
+    assert status == 200
+    assert json.loads(payload)["session"]["mode"] == "chat"
+    assert service.get(sid).agent._tool_schemas() == []
+    status, payload = request(port, "POST", "/api/chat", {"id": sid, "prompt": "hello"}, headers)
+    assert status == 200
+    events = [json.loads(block[6:]) for block in payload.split("\n\n") if block.startswith("data: ")]
+    assert next(event for event in events if event["type"] == "token")["text"] == "streamed response"
+    assert next(event for event in events if event["type"] == "snapshot")["session"]["mode"] == "chat"
+
+
+@pytest.mark.parametrize("mode", [None, True, [], {}])
+def test_http_invalid_modes_return_400(http_server, mode):
+    service, port = http_server
+    sid = service.create()["id"]
+    headers = {"Content-Type": "application/json", "X-CoreCoder-Token": service.token}
+    status, _ = request(port, "POST", "/api/action", {"id": sid, "action": "mode", "mode": mode}, headers)
+    assert status == 400
+    assert service.get(sid).snapshot()["mode"] == "code"
 
 
 def test_http_rejects_invalid_json_shape(http_server):
