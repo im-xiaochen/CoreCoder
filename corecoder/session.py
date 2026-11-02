@@ -53,19 +53,23 @@ def _session_path(session_id: str) -> Path:
     return path
 
 
-def save_session(messages: list[dict], model: str, session_id: str | None = None) -> str:
+def save_session(messages: list[dict], model: str, session_id: str | None = None, *, usage_ledger=None) -> str:
     """Save conversation to disk. Returns the session ID."""
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
     session_id = _normalize_session_id(session_id)
 
     data = {
-        "schema_version": 2,
+        "schema_version": 3 if usage_ledger is not None else 2,
         "id": session_id,
         "model": model,
         "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "messages": messages,
     }
+
+    if usage_ledger is not None:
+        from .usage import serialize_usage
+        data["usage_ledger"] = serialize_usage(usage_ledger)
 
     if not isinstance(model, str) or not model.strip() or not validate_session(data):
         raise ValueError("invalid session structure")
@@ -99,8 +103,8 @@ def save_session(messages: list[dict], model: str, session_id: str | None = None
     return session_id
 
 
-def load_session(session_id: str) -> tuple[list[dict], str] | None:
-    """Load a saved session. Returns (messages, model) or None."""
+def load_session_full(session_id: str) -> dict | None:
+    """Load the validated complete session envelope."""
     path = _session_path(session_id)
     if not path.exists():
         return None
@@ -109,11 +113,29 @@ def load_session(session_id: str) -> tuple[list[dict], str] | None:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not validate_session(data, str(path.resolve())):
             return None
-        return data["messages"], data["model"]
+        if "usage_ledger" not in data:
+            prompt = data.get("prompt_tokens", 0)
+            completion = data.get("completion_tokens", 0)
+            if type(prompt) is not int or type(completion) is not int or prompt < 0 or completion < 0:
+                return None
+            if prompt or completion:
+                from .usage import UsageEntry, serialize_usage
+                data["usage_ledger"] = serialize_usage([UsageEntry(
+                    request_id=f"legacy-session-{data.get('id', _normalize_session_id(session_id))}",
+                    attempt_id="legacy", provider="legacy", endpoint="", model=data["model"],
+                    prompt_tokens=prompt, completion_tokens=completion, rate_version="legacy",
+                )])
+        return data
     except (json.JSONDecodeError, KeyError, OSError, UnicodeError):
         log.warning("invalid session %s: unreadable archive", path.resolve())
         # a corrupt or truncated session file shouldn't crash resume
         return None
+
+
+def load_session(session_id: str) -> tuple[list[dict], str] | None:
+    """Compatibility view of a saved session."""
+    data = load_session_full(session_id)
+    return (data["messages"], data["model"]) if data else None
 
 
 def list_sessions() -> list[dict]:

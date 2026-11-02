@@ -19,7 +19,7 @@ from .hooks import load_hooks
 from .llm import LLM, LiteLLM
 from .mcp import load_mcp_tools
 from .permissions import DEFAULT_STORE, Permission
-from .session import _normalize_session_id, list_sessions, load_session, save_session
+from .session import _normalize_session_id, list_sessions, load_session_full, save_session
 from .state import SessionState
 from .tools import create_tools
 
@@ -132,9 +132,16 @@ def main():
 
     # resume saved session
     if args.resume:
-        loaded = load_session(args.resume)
+        loaded = load_session_full(args.resume)
         if loaded:
-            agent.messages, loaded_model = loaded
+            loaded_model = loaded["model"]
+            if "usage_ledger" in loaded:
+                restore = getattr(agent.llm, "restore_usage", None)
+                if restore is not None:
+                    restore(loaded["usage_ledger"])
+                elif loaded["usage_ledger"]:
+                    raise ValueError("LLM cannot restore the saved usage ledger")
+            agent.messages = loaded["messages"]
             # restore the model from the saved session unless overridden by CLI
             if not args.model:
                 agent.llm.model = loaded_model
@@ -378,7 +385,7 @@ def _repl(agent: Agent, config: Config):
         if user_input == "/save":
             try:
                 state = getattr(agent, "state", None)
-                sid = save_session(agent.messages, config.model, getattr(state, "session_id", None))
+                sid = save_session(agent.messages, config.model, getattr(state, "session_id", None), usage_ledger=getattr(agent.llm, "usage_ledger", ()))
                 console.print(f"[green]Session saved: {sid}[/green]")
                 console.print(f"Resume with: corecoder -r {sid}")
             except KeyboardInterrupt:
