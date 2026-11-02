@@ -157,7 +157,7 @@ describe("workbench composer behavior", () => {
     await user.click(screen.getByRole("button", { name: "发送任务" }));
     await user.clear(composer);
     await user.type(composer, "发送期间的新草稿");
-    await act(async () => rejectChat(new Error("会话正在运行")));
+    await act(async () => rejectChat(Object.assign(new Error("会话正在运行"), { name: "ApiError", status: 409 })));
     await waitFor(() =>
       expect((composer as HTMLTextAreaElement).value).toBe("发送期间的新草稿"),
     );

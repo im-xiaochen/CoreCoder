@@ -1,5 +1,12 @@
 import type { ToolEvent } from "./types";
 
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 let token = "";
 export function setToken(value: string) {
   token = value;
@@ -23,9 +30,11 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
   try {
     result = await response.json();
   } catch {
-    throw new Error(`服务返回了无法解析的响应（HTTP ${response.status}）。`);
+    const message = `服务返回了无法解析的响应（HTTP ${response.status}）。`;
+    if (!response.ok) throw new ApiError(message, response.status);
+    throw new Error(message);
   }
-  if (!response.ok) throw new Error(result.error || "连接失败，请重试。");
+  if (!response.ok) throw new ApiError(result.error || "连接失败，请重试。", response.status);
   return result as T;
 }
 
