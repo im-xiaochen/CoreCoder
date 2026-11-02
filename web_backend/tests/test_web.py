@@ -493,3 +493,76 @@ def test_http_rejects_invalid_json_shape(http_server):
     status, _ = request(port, "POST", "/api/sessions", [], {
         "Content-Type": "application/json", "X-CoreCoder-Token": service.token})
     assert status == 400
+
+
+def test_lifecycle_quota_and_persistence(factory):
+    service = factory()
+    first = service.create()['id']
+    service.action(first, {'action': 'rename', 'title': '  renamed  '})
+    service.action(first, {'action': 'archive'})
+    assert factory().get(first).summary()['title'] == 'renamed'
+    assert factory().get(first).summary()['archived']
+    for _ in range(100):
+        service.create()
+    with pytest.raises(RequestError) as exc:
+        service.action(first, {'action': 'restore'})
+    assert exc.value.status == 409
+    target = next(s.id for s in service.sessions.values() if not s.archived)
+    service.action(target, {'action': 'delete'})
+    service.action(first, {'action': 'restore'})
+    assert not service.get(first).archived
+
+
+def test_deleted_session_cannot_be_revived_by_stale_action(factory, monkeypatch):
+    import threading
+    service = factory()
+    sid = service.create()['id']
+    original_get = service.get
+    got = threading.Event()
+    resume = threading.Event()
+    def delayed_get(value):
+        result = original_get(value)
+        if threading.current_thread().name == 'stale':
+            got.set()
+            assert resume.wait(5)
+        return result
+    monkeypatch.setattr(service, 'get', delayed_get)
+    errors = []
+    def stale():
+        try:
+            service.action(sid, {'action': 'rename', 'title': 'revived'})
+        except RequestError as exc:
+            errors.append(exc.status)
+    thread = threading.Thread(target=stale, name='stale')
+    thread.start()
+    assert got.wait(5)
+    service.action(sid, {'action': 'delete'})
+    resume.set()
+    thread.join(5)
+    assert not thread.is_alive()
+    assert errors == [404]
+    assert not (service.store / f'{sid}.json').exists()
+
+
+
+def test_delete_refuses_artifact_parent_junction(factory, tmp_path):
+    import os
+    import subprocess
+    if os.name != 'nt':
+        pytest.skip('Windows junction test')
+    service = factory()
+    sid = service.create()['id']
+    outside = tmp_path / 'outside'
+    target = outside / sid
+    target.mkdir(parents=True)
+    sentinel = target / 'keep.txt'
+    sentinel.write_text('keep', encoding='utf-8')
+    link = service.workspace / '.corecoder-artifacts'
+    result = subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(outside)], capture_output=True, check=False)
+    if result.returncode:
+        pytest.skip('junction creation unavailable')
+    try:
+        service.action(sid, {'action': 'delete'})
+        assert sentinel.read_text(encoding='utf-8') == 'keep'
+    finally:
+        link.rmdir()

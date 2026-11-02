@@ -2511,3 +2511,7 @@ pre {
     display: none;
   }
 }
+
+.conversation-actions { display: flex; gap: 4px; padding: 0 8px 6px; flex-wrap: wrap; }
+.conversation-actions button { font-size: 0.7rem; padding: 2px 4px; color: var(--muted); background: transparent; border: 0; cursor: pointer; }
+.conversation-actions button:hover { color: var(--text); text-decoration: underline; }
