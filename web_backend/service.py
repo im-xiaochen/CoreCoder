@@ -135,7 +135,20 @@ class BrowserAgent(Agent):
             if on_tool is not None:
                 return on_tool(name, arguments)
 
-        outcome = super()._run_tool_call(tc, notify_tool)
+        command_id = uuid.uuid4().hex
+        command_active = threading.Event()
+        command_active.set()
+        if tc.name == "bash":
+            self.state.command_cancel = self.session.cancel
+            self.state.command_output = lambda stream, text, seq: self.session.emit(
+                "tool_output", {"id": tc.id, "tool_call_id": tc.id, "command_id": command_id,
+                                "stream": stream, "text": text, "seq": seq}, guard=command_active)
+        try:
+            outcome = super()._run_tool_call(tc, notify_tool)
+        finally:
+            if tc.name == "bash":
+                command_active.clear()
+                self.state.command_output = None
         if not isinstance(outcome, ToolOutcome):
             outcome = ToolOutcome(tc.id, tc.name, "failed", str(outcome), "execute")
         self.session.emit(
@@ -145,6 +158,10 @@ class BrowserAgent(Agent):
                 "name": tc.name,
                 "result": outcome.content[:24000],
                 "status": outcome.status,
+                "command_id": command_id if tc.name == "bash" else None,
+                "command_status": outcome.command_status,
+                "exit_code": outcome.exit_code,
+                "truncated": outcome.truncated,
                 "stage": outcome.stage,
                 "warning": outcome.warning,
                 # Preserve the old field for consumers that only understand
@@ -293,7 +310,9 @@ class WebSession:
         if self.cancel.is_set():
             raise TurnCancelled()
 
-    def emit(self, event: str, data: dict):
+    def emit(self, event: str, data: dict, guard=None):
+        if guard is not None and not guard.is_set():
+            return
         entry = {"type": event, **data, "at": time.time()}
         if event not in {"token", "reasoning", "snapshot", "done"}:
             self.timeline.append(entry)

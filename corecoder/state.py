@@ -63,6 +63,10 @@ class SessionState:
         )
         if hasattr(self, "rules_workspace_root"):
             child.rules_workspace_root = self.rules_workspace_root
+        if hasattr(self, "command_output"):
+            child.command_output = self.command_output
+        if hasattr(self, "command_cancel"):
+            child.command_cancel = self.command_cancel
         return child
 
     def record_outcome(

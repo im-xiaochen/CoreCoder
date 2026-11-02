@@ -13,7 +13,7 @@ import subprocess
 import threading
 from typing import ClassVar
 
-from ..shell import run_shell
+from ..command_runner import run_command
 from ..state import SessionState
 from .base import Tool
 
@@ -54,6 +54,13 @@ _DANGEROUS_PATTERNS = [
 ]
 
 
+class CommandText(str):
+    def __new__(cls, text, status, exit_code, truncated):
+        obj = super().__new__(cls, text)
+        obj.command_status, obj.exit_code, obj.truncated = status, exit_code, truncated
+        return obj
+
+
 class BashTool(Tool):
     name = "bash"
     description = (
@@ -91,29 +98,28 @@ class BashTool(Tool):
         cwd = str(self.state.cwd)
 
         try:
-            proc = run_shell(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout,
-                cwd=cwd,
-            )
+            proc = run_command(command, cwd, timeout=timeout,
+                               cancel=getattr(self.state, "command_cancel", None),
+                               on_output=getattr(self.state, "command_output", None))
 
             # track cd commands so next command runs in the right place
             trackable = _cwd_tracking_safe(command)
-            if proc.returncode == 0 and trackable:
+            if proc.exit_code == 0 and trackable:
                 tracked = _update_cwd(command, cwd)
                 if tracked is not None:
                     self.state.cwd = self.state.resolve_path(tracked)
             out = proc.stdout
             if proc.stderr:
                 out += f"\n[stderr]\n{proc.stderr}"
-            if proc.returncode != 0:
-                out += f"\n[exit code: {proc.returncode}]"
-            if proc.returncode == 0 and re.search(r"\bcd\b", command) and (not trackable or _update_cwd(command, cwd) is None):
+            if proc.status == "timeout":
+                out += f"\nError: timed out after {timeout}s [command status: timeout]"
+            elif proc.status != "exited":
+                out += f"\n[command status: {proc.status}]"
+            elif proc.exit_code != 0:
+                out += f"\n[exit code: {proc.exit_code}]"
+            if proc.truncated:
+                out += "\n[output truncated: 2 MiB limit]"
+            if proc.exit_code == 0 and re.search(r"\bcd\b", command) and (not trackable or _update_cwd(command, cwd) is None):
                 out += "\n[cwd change untracked: complex shell construct; session cwd unchanged]"
             # keep head + tail to preserve the most useful info
             if len(out) > 15_000:
@@ -122,7 +128,7 @@ class BashTool(Tool):
                     + f"\n\n... truncated ({len(out)} chars total) ...\n\n"
                     + out[-3000:]
                 )
-            return out.strip() or "(no output)"
+            return CommandText(out.strip() or "(no output)", proc.status, proc.exit_code, proc.truncated)
         except subprocess.TimeoutExpired:
             return f"Error: timed out after {timeout}s"
         except Exception as e:  # noqa: BLE001

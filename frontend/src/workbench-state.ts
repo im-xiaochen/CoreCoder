@@ -120,6 +120,15 @@ export function mergeToolEvents(events: ToolEvent[]): ToolView[] {
         pending.set(event.id, [...(pending.get(event.id) || []), viewIndex]);
       return;
     }
+    if (event.type === "tool_output") {
+      const queue = event.id ? pending.get(event.id) : undefined;
+      const viewIndex = queue?.[0];
+      if (viewIndex !== undefined) {
+        const prior = views[viewIndex];
+        views[viewIndex] = { ...prior, result: (prior.result || "") + (event.stream === "stderr" ? "[stderr] " : "") + (event.text || "") };
+      }
+      return;
+    }
     if (event.type !== "tool_result") return;
     const status =
       event.toolStatus || (event as ToolEvent & { status?: ToolStatus }).status;

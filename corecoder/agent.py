@@ -181,6 +181,7 @@ class Agent:
                 return ToolOutcome(tc.id, name, "refused", blocked, "permission")
             result = self._exec_tool(tc)
             status = outcome_status(result)
+            command_status = getattr(result, "command_status", None)
             outcome = ToolOutcome(
                 tc.id,
                 name,
@@ -188,6 +189,14 @@ class Agent:
                 result,
                 "execute",
             )
+            if command_status is not None:
+                outcome.command_status = command_status
+                outcome.exit_code = result.exit_code
+                outcome.truncated = result.truncated
+                if command_status in {"cancelled", "unknown"}:
+                    outcome.status = command_status
+                elif command_status == "timeout" or result.exit_code != 0:
+                    outcome.status = "failed"
             self._tool_result_cache[tc.id] = outcome
             try:
                 self._post_hooks(tc, outcome.content)
@@ -199,9 +208,14 @@ class Agent:
                 outcome.warning = f"post hook failed: {exc}"
                 outcome.content += f"\nWarning: post hook failed: {exc}"
             return outcome
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as exc:
             self._interrupt_seen = True
-            outcome = ToolOutcome(tc.id, name, "unknown", "Error: tool execution interrupted; result is unknown", "execute")
+            command_status = getattr(exc, "command_status", "unknown")
+            status = "cancelled" if command_status == "cancelled" else "unknown"
+            content = "Error: tool execution cancelled" if status == "cancelled" else "Error: tool execution interrupted; result is unknown"
+            outcome = ToolOutcome(tc.id, name, status, content, "execute")
+            if hasattr(exc, "command_status"):
+                outcome.command_status = command_status
             self._tool_result_cache[tc.id] = outcome
             return outcome
         except Exception as exc:  # noqa: BLE001
