@@ -254,6 +254,7 @@ class WebSession:
             permission=permission,
             hooks=service.hooks,
         )
+        self.agent.llm.model = data.get("model", service.config.model)
         old_prompt = data.get("prompt_tokens", 0)
         old_completion = data.get("completion_tokens", 0)
         if "usage_ledger" in data:
@@ -273,7 +274,6 @@ class WebSession:
                 self.agent.llm.total_prompt_tokens = old_prompt
                 self.agent.llm.total_completion_tokens = old_completion
         self.agent.messages = data.get("messages", [])
-        self.agent.llm.model = data.get("model", service.config.model)
         self.set_mode(data.get("mode", "plan" if data.get("plan_mode", False) else "code"))
         self.agent._todo.execute(data.get("tasks", []))
 

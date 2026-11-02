@@ -173,7 +173,7 @@ describe("workbench composer behavior", () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByLabelText("输入任务");
-    await user.click(screen.getByRole("button", { name: /读懂这个项目/ }));
+    await user.click(await screen.findByRole("button", { name: /读懂这个项目/ }));
     const send = screen.getByRole("button", { name: "发送任务" });
     await user.click(send);
     fireEvent.submit(send.closest("form")!);

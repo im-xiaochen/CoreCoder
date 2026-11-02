@@ -677,6 +677,10 @@ export default function App() {
           if (next) {
             const loaded = await api<Session>(`session?id=${next.id}`);
             applySession(loaded); localStorage.setItem("corecoder-session", loaded.id);
+            const restored = readDraft(localStorage, boot?.workspace || "", loaded.id);
+            setDraft(restored); draftRef.current = restored;
+            setStreamText(""); setReasoning(""); setLiveTools([]);
+            autoScroll.current = true;
           } else { setSession(null); sessionRef.current = null; localStorage.removeItem("corecoder-session"); }
         }
       }
