@@ -97,10 +97,16 @@ def validate_session(data, path=None):
             log.warning(diagnostic(path, "$", "object", data))
         return False
     version = data.get("schema_version", 1)
-    if type(version) is not int or version not in (1, 2):
-        return bad("schema_version", "integer 1 or 2", version)
-    if version == 2 and (not isinstance(data.get("id"), str) or not data["id"].strip()):
+    if type(version) is not int or version not in (1, 2, 3):
+        return bad("schema_version", "integer 1, 2 or 3", version)
+    if version >= 2 and (not isinstance(data.get("id"), str) or not data["id"].strip()):
         return bad("id", "non-empty string", data.get("id"))
+    if version == 3 or "usage_ledger" in data:
+        from .usage import deserialize_usage
+        try:
+            deserialize_usage(data.get("usage_ledger"))
+        except ValueError:
+            return bad("usage_ledger", "valid usage ledger", data.get("usage_ledger"))
     model, messages = data.get("model"), data.get("messages")
     if not isinstance(model, str) or not model.strip() or not isinstance(messages, list):
         return bad("model/messages", "non-empty string and array", model if not isinstance(model, str) else messages)

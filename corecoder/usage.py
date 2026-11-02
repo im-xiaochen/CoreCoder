@@ -2,9 +2,9 @@
 
 import contextvars
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from threading import RLock
 from typing import Any
 from uuid import uuid4
@@ -34,6 +34,61 @@ class UsageEntry:
     rate_version: str | None = None
     rate_sampled_at: str | None = None
     estimated_cost: Decimal | None = None
+
+
+def serialize_usage(entries) -> list[dict]:
+    result = []
+    for entry in entries:
+        data = asdict(entry)
+        for name in ("input_price", "output_price", "estimated_cost"):
+            if data[name] is not None:
+                data[name] = str(data[name])
+        result.append(data)
+    return result
+
+
+def deserialize_usage(data) -> tuple[UsageEntry, ...]:
+    """Validate the complete archive before exposing any restored entries."""
+    if not isinstance(data, list):
+        raise ValueError("usage ledger must be an array")  # noqa: TRY004 - invalid persisted archive
+    names = {f.name for f in fields(UsageEntry)}
+    result = []
+    seen = {}
+    for item in data:
+        if not isinstance(item, dict) or set(item) != names:
+            raise ValueError("invalid usage entry fields")
+        entry = dict(item)
+        for name in ("request_id", "attempt_id", "provider", "endpoint", "model", "currency"):
+            if not isinstance(entry[name], str) or (name in ("request_id", "attempt_id") and not entry[name]):
+                raise ValueError("invalid usage entry text")
+        for name in ("rate_version", "rate_sampled_at"):
+            if entry[name] is not None and not isinstance(entry[name], str):
+                raise ValueError("invalid usage metadata")
+        for name in ("prompt_tokens", "completion_tokens", "cached_tokens", "reasoning_tokens"):
+            if type(entry[name]) is not int or entry[name] < 0:
+                raise ValueError("invalid usage token count")
+        if type(entry["usage_known"]) is not bool:
+            raise ValueError("invalid usage status")
+        for name in ("input_price", "output_price", "estimated_cost"):
+            value = entry[name]
+            if value is not None:
+                if not isinstance(value, str):
+                    raise ValueError("invalid usage decimal")
+                try:
+                    value = Decimal(value)
+                except InvalidOperation as exc:
+                    raise ValueError("invalid usage decimal") from exc
+                if not value.is_finite() or value < 0:
+                    raise ValueError("invalid usage decimal")
+                entry[name] = value
+        key = (entry["request_id"], entry["attempt_id"])
+        parsed = UsageEntry(**entry)
+        if key in seen and seen[key] != parsed:
+            raise ValueError("conflicting duplicate usage entry")
+        if key not in seen:
+            result.append(parsed)
+            seen[key] = parsed
+    return tuple(result)
 
 
 @dataclass(frozen=True)

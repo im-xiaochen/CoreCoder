@@ -272,12 +272,20 @@ class LLM:
         if scope is not None:
             scope.record(entry)
 
-    def import_legacy_usage(self, prompt_tokens: int, completion_tokens: int) -> None:
+    def restore_usage(self, data) -> None:
+        from .usage import deserialize_usage
+        entries = deserialize_usage(data)
+        ledger = UsageLedger()
+        for entry in entries:
+            ledger.append(entry)
+        self._usage = ledger
+
+    def import_legacy_usage(self, prompt_tokens: int, completion_tokens: int, *, request_id: str | None = None) -> None:
         """Import an old aggregate without assigning it today's model price."""
         context = RequestContext.new(
             provider=getattr(self, "provider", "legacy"),
             endpoint=getattr(self, "endpoint", ""), model=getattr(self, "model", "legacy"),
-            input_price=None, output_price=None, rate_version="legacy",
+            input_price=None, output_price=None, rate_version="legacy", request_id=request_id or uuid4().hex,
         )
         self._record_usage(context, "legacy", int(prompt_tokens), int(completion_tokens), True)
 

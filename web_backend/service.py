@@ -19,7 +19,7 @@ from corecoder.hooks import load_hooks
 from corecoder.llm import LLM, LiteLLM
 from corecoder.mcp import load_mcp_tools
 from corecoder.permissions import Permission
-from corecoder.session import list_sessions, load_session, save_session
+from corecoder.session import list_sessions, load_session_full, save_session
 from corecoder.tools.agent import AgentTool
 from corecoder.tools.base import Tool, ToolOutcome
 from corecoder.tools.bash import BashTool
@@ -29,6 +29,7 @@ from corecoder.tools.grep import GrepTool
 from corecoder.tools.read import ReadFileTool
 from corecoder.tools.todo import TodoWriteTool
 from corecoder.tools.write import WriteFileTool
+from corecoder.usage import deserialize_usage, serialize_usage
 
 
 class RequestError(Exception):
@@ -251,17 +252,26 @@ class WebSession:
             permission=permission,
             hooks=service.hooks,
         )
-        self.agent.messages = data.get("messages", [])
-        self.agent.llm.model = data.get("model", service.config.model)
         old_prompt = data.get("prompt_tokens", 0)
         old_completion = data.get("completion_tokens", 0)
-        if old_prompt or old_completion:
+        if "usage_ledger" in data:
+            restore = getattr(self.agent.llm, "restore_usage", None)
+            if restore is not None:
+                restore(data["usage_ledger"])
+            elif data["usage_ledger"]:
+                raise ValueError("LLM cannot restore the saved usage ledger")
+        elif old_prompt or old_completion:
             importer = getattr(self.agent.llm, "import_legacy_usage", None)
             if importer is not None:
-                importer(old_prompt, old_completion)
+                if hasattr(self.agent.llm, "restore_usage"):
+                    importer(old_prompt, old_completion, request_id=f"legacy-web-{self.id}")
+                else:
+                    importer(old_prompt, old_completion)
             else:
                 self.agent.llm.total_prompt_tokens = old_prompt
                 self.agent.llm.total_completion_tokens = old_completion
+        self.agent.messages = data.get("messages", [])
+        self.agent.llm.model = data.get("model", service.config.model)
         self.set_mode(data.get("mode", "plan" if data.get("plan_mode", False) else "code"))
         self.agent._todo.execute(data.get("tasks", []))
 
@@ -394,6 +404,9 @@ class WebSession:
             "baselines": {p: base64.b64encode(b).decode("ascii") if b is not None else None for p, b in self.baselines.items()},
             "undo_hashes": self.undo_hashes,
         }
+        if hasattr(self.agent.llm, "usage_ledger"):
+            data["schema_version"] = 3
+            data["usage_ledger"] = serialize_usage(self.agent.llm.usage_ledger)
         target = self.service.store / f"{self.id}.json"
         temp = target.with_suffix(".tmp")
         temp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -416,6 +429,11 @@ class Service:
             for path in self.store.glob("*.json"):
                 try:
                     data = json.loads(path.read_text(encoding="utf-8"))
+                    version = data.get("schema_version", 1)
+                    if type(version) is not int or version not in (1, 2, 3):
+                        continue
+                    if version == 3 or "usage_ledger" in data:
+                        deserialize_usage(data.get("usage_ledger"))
                     if data.get("workspace") != str(self.workspace) or not isinstance(data.get("messages"), list):
                         continue
                     if not isinstance(data.get("id"), str) or not data["id"].isalnum():
@@ -600,7 +618,7 @@ class Service:
                 session.saved_tool_outcomes = []
                 notice = "对话上下文已清空，文件修改保留。"
             elif action == "save":
-                sid_saved = save_session(session.agent.messages, session.agent.llm.model, f"web_{session.id}")
+                sid_saved = save_session(session.agent.messages, session.agent.llm.model, f"web_{session.id}", usage_ledger=getattr(session.agent.llm, "usage_ledger", ()))
                 notice = f"已保存，可在 CLI 中使用 corecoder -r {sid_saved} 恢复。"
             elif action == "compact":
                 before = estimate_tokens(session.agent.messages)
@@ -644,14 +662,20 @@ class Service:
                 session.agent.permission._always.clear()
                 notice = "已清除此对话中持续允许的工具。"
             elif action == "import":
-                loaded = load_session(str(data.get("saved_id", "")))
-                if not loaded or not isinstance(loaded[0], list):
+                loaded = load_session_full(str(data.get("saved_id", "")))
+                if not loaded or not isinstance(loaded["messages"], list):
                     raise RequestError("该 CLI 会话无法读取。")
                 if session.agent.messages:
                     raise RequestError("请在空白新对话中恢复存档，避免覆盖当前上下文。", 409)
-                session.agent.messages, session.agent.llm.model = loaded
+                if "usage_ledger" in loaded:
+                    restore = getattr(session.agent.llm, "restore_usage", None)
+                    if restore is not None:
+                        restore(loaded["usage_ledger"])
+                    elif loaded["usage_ledger"]:
+                        raise RequestError("当前模型客户端无法恢复存档中的费用账本。", 409)
+                session.agent.messages, session.agent.llm.model = loaded["messages"], loaded["model"]
                 self.repair_pending(session.agent)
-                session.title = next((str(m.get("content", ""))[:28] for m in loaded[0] if m.get("role") == "user"), "恢复的对话")
+                session.title = next((str(m.get("content", ""))[:28] for m in loaded["messages"] if m.get("role") == "user"), "恢复的对话")
                 notice = "已恢复 CLI 对话。"
             else:
                 raise RequestError("不支持此操作。")
