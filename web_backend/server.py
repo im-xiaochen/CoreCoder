@@ -69,6 +69,53 @@ def make_handler(service: Service, frontend: Path):
                 url = urlsplit(self.path)
                 if url.path == "/api/bootstrap":
                     return self.reply(service.bootstrap())
+                if url.path == "/api/run":
+                    rid = parse_qs(url.query).get("id", [""])[0]
+                    try:
+                        return self.reply(service.runs.view(rid))
+                    except KeyError:
+                        raise RequestError("任务不存在。", 404)
+                if url.path == "/api/run/events":
+                    query = parse_qs(url.query)
+                    rid = query.get("id", [""])[0]
+                    try:
+                        run = service.runs.view(rid)
+                        after = int(query.get("after", [self.headers.get("Last-Event-ID", "0")])[0])
+                        if after < 0 or after > run['last_seq']:
+                            raise ValueError()
+                    except KeyError:
+                        raise RequestError("任务不存在。", 404)
+                    except ValueError:
+                        raise RequestError("事件游标无效。", 400)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    self.close_connection = True
+                    try:
+                        while True:
+                            with service.runs.changed:
+                                gap, events, status = service.runs.events_after(rid, after)
+                                view = service.runs.view(rid) if gap else None
+                                if not events and not gap and (status not in {'completed', 'cancelled', 'failed', 'interrupted'} or not service.runs.runs[rid]['events'] or service.runs.runs[rid]['events'][-1]['type'] != 'done'):
+                                    service.runs.changed.wait(timeout=10)
+                                    continue
+                            if view is not None:
+                                session = service.get(view['session_id'])
+                                events = [{'type': 'reset', 'run_id': rid, 'seq': view['last_seq'],
+                                           'session': session.snapshot(), 'text': view['text'],
+                                           'reasoning': view['reasoning'], 'status': view['status']}]
+                            for event in events:
+                                payload = f"id: {event['seq']}\ndata: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+                                self.wfile.write(payload.encode('utf-8'))
+                                self.wfile.flush()
+                                after = event['seq']
+                            if any(e['type'] == 'done' for e in events) or (not events and status in {'completed', 'cancelled', 'failed', 'interrupted'}):
+                                break
+                    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                        pass
+                    return
                 if url.path == "/api/sessions":
                     return self.reply(service.summaries())
                 if url.path == "/api/saved-sessions":
@@ -109,6 +156,13 @@ def make_handler(service: Service, frontend: Path):
                     return self.reply(service.create(), 201)
                 if path == "/api/action":
                     return self.reply(service.action(data.get("id", ""), data))
+                if path == "/api/runs":
+                    sid = data.get("id", "")
+                    prompt = data.get("prompt", "")
+                    if not isinstance(prompt, str):
+                        raise RequestError("任务必须是文本。")
+                    rid = service.start(sid, prompt, legacy_events=False)
+                    return self.reply(service.runs.view(rid), 201)
                 if path == "/api/approve":
                     service.approve(data.get("id", ""), data.get("permission_id", ""), data.get("answer", "deny"))
                     return self.reply({"ok": True})
@@ -142,7 +196,9 @@ def make_handler(service: Service, frontend: Path):
                         if event.get("type") == "done":
                             break
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
-                    service.stop(sid)
+                    session = service.get(sid)
+                    if session.events is events:
+                        session.events = None
             except RequestError as exc:
                 self.reply({"error": str(exc)}, exc.status)
             except (OSError, ValueError, TypeError, AttributeError):

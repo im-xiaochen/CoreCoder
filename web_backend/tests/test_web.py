@@ -494,7 +494,6 @@ def test_http_rejects_invalid_json_shape(http_server):
         "Content-Type": "application/json", "X-CoreCoder-Token": service.token})
     assert status == 400
 
-
 def test_lifecycle_quota_and_persistence(factory):
     service = factory()
     first = service.create()['id']
@@ -511,7 +510,6 @@ def test_lifecycle_quota_and_persistence(factory):
     service.action(target, {'action': 'delete'})
     service.action(first, {'action': 'restore'})
     assert not service.get(first).archived
-
 
 def test_deleted_session_cannot_be_revived_by_stale_action(factory, monkeypatch):
     import threading
@@ -544,7 +542,6 @@ def test_deleted_session_cannot_be_revived_by_stale_action(factory, monkeypatch)
     assert not (service.store / f'{sid}.json').exists()
 
 
-
 def test_delete_refuses_artifact_parent_junction(factory, tmp_path):
     import os
     import subprocess
@@ -566,3 +563,62 @@ def test_delete_refuses_artifact_parent_junction(factory, tmp_path):
         assert sentinel.read_text(encoding='utf-8') == 'keep'
     finally:
         link.rmdir()
+
+def test_restart_marks_running_interrupted_without_replaying(factory):
+    service = factory()
+    sid = service.create()['id']
+    run_id = service.runs.create(sid)
+    session = service.get(sid)
+    session.run_id = run_id
+    session.persist()
+    service.runs.status(run_id, 'waiting_permission')
+    restored = factory()
+    assert restored.runs.view(run_id)['status'] == 'interrupted'
+    assert restored.get(sid).pending_permission is None
+    _, events, _ = restored.runs.events_after(run_id, 0)
+    assert events[-1]['type'] == 'done'
+    assert events[-1]['status'] == 'interrupted'
+    with pytest.raises(RequestError):
+        restored.approve(sid, 'old-permission', 'allow')
+
+
+def test_run_event_replay_is_non_consuming(factory):
+    service = factory([LLMResponse(content='done')])
+    sid = service.create()['id']
+    events = service.start(sid, 'hello')
+    until(events, 'done')
+    rid = service.get(sid).run_id
+    gap, first, status = service.runs.events_after(rid, 0)
+    assert not gap and status == 'completed'
+    assert first == service.runs.events_after(rid, 0)[1]
+    assert first[-1]['type'] == 'done'
+    assert [e['seq'] for e in first] == list(range(1, len(first) + 1))
+    assert service.runs.events_after(rid, first[-2]['seq'])[1] == [first[-1]]
+
+@pytest.mark.parametrize('truncated', [False, True])
+def test_restart_terminal_without_done_completes_journal(factory, truncated):
+    service = factory()
+    sid = service.create()['id']
+    rid = service.runs.create(sid)
+    service.runs.status(rid, 'completed')
+    if truncated:
+        journal = service.runs.root / f'{rid}.jsonl'
+        journal.write_bytes(b'{"type":"done"')
+    restored = factory()
+    view = restored.runs.view(rid)
+    assert view['status'] == 'completed'
+    assert restored.runs.events_after(rid, 0)[1][-1]['type'] == 'done'
+
+def test_import_nonempty_ledger_requires_restore_without_mutation(factory):
+    from corecoder.usage import UsageEntry
+
+    service = factory()
+    sid = service.create()['id']
+    entry = UsageEntry('request', 'attempt', 'provider', 'endpoint', 'model', prompt_tokens=2)
+    cli_sessions.save_session([{'role': 'user', 'content': 'saved'}], 'other-model', 'ledger', usage_ledger=[entry])
+    session = service.get(sid)
+    before = session.snapshot()
+    with pytest.raises(RequestError) as exc:
+        service.action(sid, {'action': 'import', 'saved_id': 'ledger'})
+    assert exc.value.status == 409
+    assert session.snapshot() == before

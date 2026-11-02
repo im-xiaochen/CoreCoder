@@ -53,3 +53,16 @@ describe("JSON API errors", () => {
     await expect(api("bootstrap")).rejects.toThrow("无法解析");
   });
 });
+
+describe("durable run stream", () => {
+  it("reconnects at the cursor and ignores repeated events", async () => {
+    const { followRun } = await import("./api");
+    const stream = (value: string) => new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(value)); c.close(); } }));
+    const fetchMock = vi.fn().mockResolvedValueOnce(stream('id: 1\ndata: {"type":"token","seq":1,"text":"a"}\n\n')).mockResolvedValueOnce(stream('id: 1\ndata: {"type":"token","seq":1,"text":"a"}\n\nid: 2\ndata: {"type":"done","seq":2}\n\n'));
+    vi.stubGlobal("fetch", fetchMock);
+    const events: string[] = [];
+    await followRun("run", (event) => events.push(event.type), new AbortController().signal);
+    expect(events).toEqual(["token", "done"]);
+    expect(fetchMock.mock.calls[1][0]).toContain("after=1");
+  });
+});

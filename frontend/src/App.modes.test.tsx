@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import type { Bootstrap, Session, SessionMode } from "./types";
 
-const mocks = vi.hoisted(() => ({ api: vi.fn(), chat: vi.fn(), setToken: vi.fn() }));
+const mocks = vi.hoisted(() => ({ api: vi.fn(), chat: vi.fn(), followRun: vi.fn(() => new Promise(() => {})), setToken: vi.fn() }));
 vi.mock("./api", () => mocks);
 
 function session(id: string, title: string): Session {
@@ -35,6 +35,7 @@ beforeEach(() => {
   mocks.api.mockReset();
   mocks.chat.mockReset();
   mocks.api.mockImplementation(async (path: string, body?: Record<string, unknown>) => {
+    if (path === "runs") return mocks.chat(body!.id, body!.prompt);
     if (path === "bootstrap") return {
       token: "token", version: "test", workspace: "D:/workspace", project: "项目", model: "test-model",
       provider: "openai", base_url: null, key_configured: true, tools: [], mcp_tools: [],
@@ -141,7 +142,7 @@ describe("workbench mode selection", () => {
     sessions.a.mode = "chat";
     // The explicit mode is authoritative even if an old flag is inconsistent.
     sessions.a.plan_mode = true;
-    mocks.chat.mockResolvedValue(undefined);
+    mocks.chat.mockResolvedValue({ id: "run-1" });
     const user = userEvent.setup();
     render(<App />);
     const composer = await screen.findByLabelText<HTMLTextAreaElement>("输入任务");
@@ -176,10 +177,7 @@ describe("workbench mode selection", () => {
     sessions.a.mode = "plan";
     sessions.a.plan_mode = true;
     let finish!: () => void;
-    mocks.chat.mockImplementation((_id, _prompt, _onEvent, accepted) => {
-      accepted?.();
-      return new Promise<void>((resolve) => { finish = resolve; });
-    });
+    mocks.chat.mockImplementation(() => new Promise((resolve) => { finish = () => resolve({ id: "run-1" }); }));
     const user = userEvent.setup();
     render(<App />);
     const composer = await screen.findByLabelText<HTMLTextAreaElement>("输入任务");
