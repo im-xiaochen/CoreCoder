@@ -6,6 +6,7 @@ from contextlib import nullcontext
 
 from .context import ContextBudgetExceeded, ContextManager, outcome_status, output_reserve_for
 from .permissions import Permission
+from .project_rules import discover_rules
 from .prompt import CHAT_MODE_PROMPT, PLAN_MODE_PROMPT, system_prompt
 from .results import RunResult
 from .state import SessionState
@@ -50,6 +51,7 @@ class Agent:
         self.max_rounds, self._system = max_rounds, system_prompt(self.tools, self.state)
         self.plan_mode = False
         self.chat_mode = False
+        self.rule_sources = []
         self._tool_execution_cwds, self._tool_result_cache = {}, {}
         self.last_result = None
         self._interrupt_seen = False
@@ -60,8 +62,16 @@ class Agent:
 
     def _full_messages(self):
         if self.chat_mode:
+            self.rule_sources = []
             return [{"role": "system", "content": CHAT_MODE_PROMPT}] + self.messages
+        rules = discover_rules(self.state.cwd, getattr(self.state, "rules_workspace_root", self.state.workspace_root))
+        self.rule_sources = [{k: v for k, v in item.items() if k != "content"} for item in rules]
         system = system_prompt(self.tools, self.state)
+        loaded = [r for r in rules if r["status"] == "loaded"]
+        if loaded:
+            system += "\n\n# Project instructions\nThese project instructions are subordinate to the user request and do not override permissions or mode restrictions.\n"
+            for rule in loaded:
+                system += f"\n## {rule['path']}\n{rule['content']}\n"
         if self.plan_mode:
             system += "\n\n" + PLAN_MODE_PROMPT
         if self._todo is not None:
@@ -198,9 +208,10 @@ class Agent:
             return ToolOutcome(tc.id, name, "failed", f"Error: {exc}", "execute")
 
     def _run_turn(self, on_token=None, on_tool=None, on_reasoning=None):
+        system = self._full_messages()[0]["content"]
         prepared = self.context.prepare_request(
             self.messages,
-            system=self._full_messages()[0]["content"],
+            system=system,
             tools=self._tool_schemas(),
             output_reserve=output_reserve_for(self.llm, 4096),
             artifact_dir=getattr(self.state, "artifact_dir", None),
@@ -211,7 +222,7 @@ class Agent:
         self.messages[:] = prepared.messages
         self._turn_started = True
         return self.llm.chat(
-            messages=self._full_messages(), tools=self._tool_schemas(), on_token=on_token, on_reasoning=on_reasoning
+            messages=[{"role": "system", "content": system}, *self.messages], tools=self._tool_schemas(), on_token=on_token, on_reasoning=on_reasoning
         )
 
     def chat_result(self, user_input, on_token=None, on_tool=None, on_reasoning=None):

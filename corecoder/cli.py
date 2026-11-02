@@ -117,6 +117,7 @@ def main():
         permission = Permission(ask=_ask_permission, persist_path=DEFAULT_STORE)
     session_id = _normalize_session_id(args.resume)
     state = SessionState(session_id=session_id)
+    state.rules_workspace_root = None
     tools = [*create_tools(state), *load_mcp_tools()]
     agent_kwargs = {
         "llm": llm,
@@ -300,6 +301,13 @@ def _repl(agent: Agent, config: Config):
             break
         if user_input == "/help":
             _show_help()
+            continue
+        if user_input == "/rules":
+            agent._full_messages()
+            for rule in agent.rule_sources:
+                console.print(f"{rule['status']}: {rule['path']} {rule.get('reason', '')}")
+            if not agent.rule_sources:
+                console.print("No project rules loaded.")
             continue
         if user_input == "/reset":
             agent.reset()
@@ -539,6 +547,7 @@ def _show_help():
             "  /plan          Toggle plan mode: read-only, then a plan to approve\n"
             "  /save          Save session to disk\n"
             "  /sessions      List saved sessions\n"
+            "  /rules         Show project rule sources\n"
             "  quit           Exit CoreCoder\n"
             "\n"
             "[bold]Input:[/bold]\n"

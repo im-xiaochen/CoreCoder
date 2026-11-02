@@ -73,6 +73,7 @@ export interface Session extends SessionSummary {
   timeline: ToolEvent[];
   tool_outcomes: { call_id: string | null; status: ToolStatus }[];
   cwd: string;
+  rule_sources?: { path: string; status: string; reason?: string }[];
   plan_mode: boolean;
   /** Older server snapshots only include plan_mode. */
   mode?: SessionMode;

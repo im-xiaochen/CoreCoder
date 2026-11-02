@@ -285,6 +285,8 @@ class WebSession:
         if not isinstance(mode, str) or mode not in {"chat", "plan", "code"}:
             raise ValueError("请选择聊天、计划或编程模式。")
         self.agent.chat_mode = mode == "chat"
+        if self.agent.chat_mode:
+            self.agent.rule_sources = []
         self.agent.plan_mode = mode == "plan"
 
     def check_cancelled(self):
@@ -353,6 +355,7 @@ class WebSession:
                 ],
             ],
             "cwd": self.cwd,
+            "rule_sources": self.agent.rule_sources,
             "mode": self.mode,
             "plan_mode": self.agent.plan_mode,
             "tasks": self.agent._todo._tasks,
