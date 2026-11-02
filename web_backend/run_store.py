@@ -78,9 +78,11 @@ class RunStore:
             self._save(run)
             self.changed.notify_all()
 
-    def append(self, rid, event):
+    def append(self, rid, event, guard=None):
         with self.lock:
             run = self.runs[rid]
+            if guard is not None and (not guard.is_set() or run['status'] in {'completed', 'failed', 'cancelled', 'interrupted'}):
+                return None
             entry = {**event, 'run_id': rid, 'seq': run['last_seq'] + 1}
             encoded = json.dumps(entry, ensure_ascii=False, separators=(',', ':')) + '\n'
             path = self.root / f'{rid}.jsonl'

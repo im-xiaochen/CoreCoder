@@ -138,15 +138,19 @@ class BrowserAgent(Agent):
                 return on_tool(name, arguments)
 
         command_id = uuid.uuid4().hex
+        command_active = threading.Event()
+        command_active.set()
+        command_run_id = self.session.run_id
         if tc.name == "bash":
             self.state.command_cancel = self.session.cancel
             self.state.command_output = lambda stream, text, seq: self.session.emit(
                 "tool_output", {"id": tc.id, "tool_call_id": tc.id, "command_id": command_id,
-                                "stream": stream, "text": text, "seq": seq})
+                                "stream": stream, "text": text, "seq": seq}, guard=command_active, run_id=command_run_id)
         try:
             outcome = super()._run_tool_call(tc, notify_tool)
         finally:
             if tc.name == "bash":
+                command_active.clear()
                 self.state.command_output = None
         if not isinstance(outcome, ToolOutcome):
             outcome = ToolOutcome(tc.id, tc.name, "failed", str(outcome), "execute")
@@ -310,10 +314,17 @@ class WebSession:
         if self.cancel.is_set():
             raise TurnCancelled()
 
-    def emit(self, event: str, data: dict):
+    def emit(self, event: str, data: dict, guard=None, run_id=None):
+        if guard is not None and (not guard.is_set() or self.run_id != run_id):
+            return
         entry = {"type": event, **data, "at": time.time()}
-        if self.run_id is not None:
-            entry = self.service.runs.append(self.run_id, entry)
+        target_run = run_id if guard is not None else self.run_id
+        if target_run is not None:
+            entry = self.service.runs.append(target_run, entry, guard=guard) if guard is not None else self.service.runs.append(target_run, entry)
+            if entry is None:
+                return
+        if guard is not None and (not guard.is_set() or self.run_id != run_id):
+            return
         if event not in {"token", "reasoning", "snapshot", "done"}:
             self.timeline.append(entry)
         if self.events is not None:
