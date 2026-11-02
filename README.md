@@ -25,7 +25,7 @@
 
 | | CoreCoder | Claude Code | aider | nanoGPT |
 |---|---|---|---|---|
-| Lines of code | ~2,266 engine / 4,981 total | hundreds of thousands (closed) | tens of thousands of Python | ~600 (two files) |
+| Lines of code | ~2,291 engine / 5,326 total | hundreds of thousands (closed) | tens of thousands of Python | ~600 (two files) |
 | Time to read it all | one afternoon | can't (closed) | a few days of slogging | one afternoon |
 | Breakpoint, change, rerun? | yes, every line | no | yes, but there's a lot | yes |
 | What it's for | understand one, then fork your own | production coding assistant | terminal pair-programming | minimal GPT for teaching |
@@ -36,7 +36,7 @@ The nanoGPT column is there as a reference point: minimal, readable, but it teac
 
 I've always felt coding agents get talked about as if they were arcane. Strip a tool like Claude Code or Cursor all the way down and the core is a `while` loop wrapped around a large model, plus seven or eight tools that let it actually do things. The hard part was never the loop; it's everything the loop has to cope with once it meets the real world. CoreCoder is the minimal version that writes that core out honestly.
 
-The engine (loop, model interface, context, tools, sessions) is 2,266 lines once you drop blank lines and comments. Counting the outer CLI, config and packaging too, the whole package is 32 files: 5,362 physical lines, 4,597 net. The growth since the original 1,161-line snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation and usage accounting.
+The engine (loop, model interface, context, tools, sessions) is 2,291 lines once you drop blank lines and comments. Counting the outer CLI, config and packaging too, the whole package is 32 files: 5,362 physical lines, 4,597 net. The growth since the original 1,161-line snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation and usage accounting.
 
 And it really runs: reads and writes files, executes shell, spawns sub-agents, budgets requests and archives context, and tells you the tokens and dollars a run burned whenever you ask. Anything that would mutate your disk or run a command stops for your consent first. The regression suite checks these behaviors. But the point of it running isn't to become your daily driver. It runs so the walkthrough can't lie: a reference that shows how an agent works has to actually work.
 
@@ -300,4 +300,4 @@ By [Yufeng He](https://github.com/he-yufeng), formerly at Moonshot AI (Kimi). I 
 
 > CoreCoder was formerly named NanoCoder; it was renamed to avoid confusion with [Nano-Collective/nanocoder](https://github.com/Nano-Collective/nanocoder), and old links redirect here automatically.
 
-Project rules: code and plan modes load bounded `AGENTS.md` files from workspace root to current directory. Chat mode does not read them. Use `/rules` or the web workspace panel to inspect sources.
+Project rules: in code and plan modes CoreCoder reads `AGENTS.md` from the workspace root through the current directory, with bounded file sizes. Chat mode does not discover project rules. Use `/rules` in the CLI or the workspace panel on the web to inspect sources and skipped files.

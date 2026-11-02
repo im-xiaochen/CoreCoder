@@ -53,7 +53,7 @@ import {
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { api, chat, setToken } from "./api";
+import { api, followRun, setToken, type RunInfo } from "./api";
 import AppearanceSettings from "./AppearanceSettings";
 import ModeMenu, { sessionMode } from "./ModeMenu";
 import {
@@ -575,7 +575,7 @@ export default function App() {
       bottom.current?.scrollIntoView({ behavior: busy ? "instant" : "smooth" });
   }, [streamText, liveTools.length, session?.messages.length, busy]);
   useEffect(() => {
-    if (!session?.busy || streamText || liveTools.length) return;
+    if (!session?.busy || session.run_id || streamText || liveTools.length) return;
     const id = session.id;
     const navigation = navigationRef.current;
     let alive = true;
@@ -611,6 +611,57 @@ export default function App() {
     applySession,
     refreshList,
   ]);
+  useEffect(() => {
+    const rid = session?.run_id;
+    if (!rid || !session.busy) return;
+    const sid = session.id;
+    const controller = new AbortController();
+    setStreamText(""); setReasoning(""); setLiveTools([]);
+    const isCurrentRun = () => !controller.signal.aborted &&
+      sessionRef.current?.id === sid && sessionRef.current?.run_id === rid;
+    void followRun(rid, (event) => {
+      if (!isCurrentRun()) return;
+      if (event.type === "reset") {
+        const terminal = ["completed", "cancelled", "failed", "interrupted"].includes(event.status || "");
+        if (terminal) {
+          setStreamText(""); setReasoning(""); setLiveTools([]); setPermission(null);
+          void api<Session>(`session?id=${encodeURIComponent(sid)}`).then((value) => {
+            if (isCurrentRun()) applySession(value);
+            void refreshList();
+          }).catch(() => flash("无法读取任务最终状态，请稍后刷新。", true));
+        } else {
+          if (event.session) applySession(event.session);
+          setStreamText(event.text || "");
+          setReasoning(event.reasoning || "");
+          setLiveTools([]);
+        }
+      }
+      if (event.type === "token") setStreamText((text) => text + (event.text || ""));
+      if (event.type === "reasoning") setReasoning((text) => text + (event.text || ""));
+      if (["tool_start", "tool_output", "tool_result"].includes(event.type)) setLiveTools((events) => [...events, event]);
+      if (event.type === "run_result" && event.runStatus) setRunResult({
+        status: event.runStatus, finishReason: event.finish_reason, rounds: event.rounds,
+        toolErrors: event.tool_errors || [], text: event.text, at: event.at,
+      });
+      if (event.type === "permission") {
+        void api<Session>(`session?id=${encodeURIComponent(sid)}`).then((value) => {
+          if (isCurrentRun()) setPermission(value.pending_permission);
+        }).catch(() => flash("无法读取当前授权状态，请重试。", true));
+      }
+      if (event.type === "error") flash(event.message || "运行失败", true);
+      if (event.type === "notice") flash(event.message || "");
+      if (event.type === "snapshot" && event.session) {
+        applySession(event.session); setStreamText(""); setLiveTools([]); setPermission(null);
+      }
+      if (event.type === "done") {
+        void api<Session>(`session?id=${encodeURIComponent(sid)}`).then((value) => {
+          if (isCurrentRun()) applySession(value);
+          void refreshList();
+        }).catch(() => flash("无法读取任务最终状态，请稍后刷新。", true));
+      }
+    }, controller.signal);
+    return () => controller.abort();
+  }, [session?.id, session?.run_id, applySession, flash, refreshList]);
   useEffect(() => {
     if (!busy) setStopping(false);
   }, [busy]);
@@ -773,88 +824,57 @@ export default function App() {
     const id = runSession.id;
     let accepted = false;
     try {
-      await chat(
-        id,
-        prompt,
-        (event) => {
-          if (event.type === "token")
-            setStreamText((text) => text + event.text);
-          if (event.type === "reasoning")
-            setReasoning((text) => text + event.text);
-          if (event.type === "tool_start" || event.type === "tool_output" || event.type === "tool_result")
-            setLiveTools((events) => [...events, event]);
-          if (event.type === "run_result" && event.runStatus)
-            setRunResult({
-              status: event.runStatus,
-              finishReason: event.finish_reason,
-              rounds: event.rounds,
-              toolErrors: event.tool_errors || [],
-              text: event.text,
-              at: event.at,
-            });
-          if (event.type === "permission")
-            setPermission({
-              id: event.id!,
-              name: event.name!,
-              arguments: event.arguments!,
-            });
-          if (event.type === "error") flash(event.message || "运行失败", true);
-          if (event.type === "notice") flash(event.message || "");
-          if (event.type === "snapshot" && event.session) {
-            applySession(event.session);
-            setStreamText("");
-            setLiveTools([]);
-            setPermission(null);
-          }
-        },
-        () => {
-          accepted = true;
-          const optimistic = {
-            ...runSession,
-            busy: true,
-            messages: [
-              ...runSession.messages,
-              { role: "user" as const, content: prompt },
-            ],
-          };
-          setSession(optimistic);
-          sessionRef.current = optimistic;
-          if (draftRef.current.trim() === prompt) {
-            setDraft("");
-            draftRef.current = "";
-            writeDraft(localStorage, boot?.workspace || "", id, "");
-          }
-          setBusy(true);
-          busyRef.current = true;
-          setSending(false);
-          autoScroll.current = true;
-          setRunResult(null);
-          setStreamText("");
-          setReasoning("");
-          setLiveTools([]);
-          setPermission(null);
-        },
-      );
+      const run = await api<RunInfo>("runs", { id, prompt });
+      accepted = true;
+      const optimistic = {
+        ...runSession,
+        run_id: run.id,
+        busy: true,
+        messages: [...runSession.messages, { role: "user" as const, content: prompt }],
+      };
+      setSession(optimistic);
+      sessionRef.current = optimistic;
+      if (draftRef.current.trim() === prompt) {
+        setDraft(""); draftRef.current = "";
+        writeDraft(localStorage, boot?.workspace || "", id, "");
+      }
+      setBusy(true); busyRef.current = true;
+      autoScroll.current = true;
+      setRunResult(null); setStreamText(""); setReasoning(""); setLiveTools([]); setPermission(null);
     } catch (e) {
       if (!accepted) {
-        const restored = restoreRejectedPrompt(draftRef.current, prompt);
-        setDraft(restored);
-        draftRef.current = restored;
+        try {
+          const latest = await api<Session>(`session?id=${encodeURIComponent(id)}`);
+          if (sessionRef.current?.id === id && latest.run_id && latest.run_id !== runSession.run_id) {
+            accepted = true;
+            applySession(latest);
+            if (draftRef.current.trim() === prompt) {
+              setDraft(""); draftRef.current = "";
+              writeDraft(localStorage, boot?.workspace || "", id, "");
+            }
+            setRunResult(latestRunResult(latest.timeline));
+            setStreamText(""); setReasoning(""); setLiveTools([]);
+            flash("任务已启动，已恢复连接。");
+          } else if (e instanceof Error && e.name === "ApiError" && "status" in e && typeof e.status === "number" && e.status >= 400 && e.status < 500) {
+            const restored = restoreRejectedPrompt(draftRef.current, prompt);
+            setDraft(restored); draftRef.current = restored;
+            flash((e as Error).message, true);
+            sendingRef.current = false;
+          } else {
+            flash("无法确认任务是否已启动，请刷新页面后再试。", true);
+          }
+        } catch {
+          // The server may have accepted the request. Block another submission
+          // until a reload reconciles the authoritative session state.
+          flash("无法确认任务是否已启动，请刷新页面后再试。", true);
+          return;
+        }
       }
-      flash((e as Error).message, true);
     } finally {
-      try {
-        const finalSession = await api<Session>(`session?id=${id}`);
-        if (sessionRef.current?.id === id) applySession(finalSession);
-        await refreshList();
-      } catch {
-        if (accepted)
-          flash("连接已中断，正在后台确认最终状态；请勿重复提交。", true);
+      if (accepted || sessionRef.current?.id !== id || !sendingRef.current) {
+        sendingRef.current = false;
+        setSending(false);
       }
-      setStreamText("");
-      setLiveTools([]);
-      sendingRef.current = false;
-      setSending(false);
     }
   };
   const approve = async (answer: string) => {

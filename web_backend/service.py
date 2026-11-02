@@ -32,6 +32,8 @@ from corecoder.tools.todo import TodoWriteTool
 from corecoder.tools.write import WriteFileTool
 from corecoder.usage import deserialize_usage, serialize_usage
 
+from .run_store import TERMINAL, RunStore
+
 
 class RequestError(Exception):
     def __init__(self, message: str, status: int = 400):
@@ -138,11 +140,12 @@ class BrowserAgent(Agent):
         command_id = uuid.uuid4().hex
         command_active = threading.Event()
         command_active.set()
+        command_run_id = self.session.run_id
         if tc.name == "bash":
             self.state.command_cancel = self.session.cancel
             self.state.command_output = lambda stream, text, seq: self.session.emit(
                 "tool_output", {"id": tc.id, "tool_call_id": tc.id, "command_id": command_id,
-                                "stream": stream, "text": text, "seq": seq}, guard=command_active)
+                                "stream": stream, "text": text, "seq": seq}, guard=command_active, run_id=command_run_id)
         try:
             outcome = super()._run_tool_call(tc, notify_tool)
         finally:
@@ -247,6 +250,7 @@ class WebSession:
         self.pending_permission: dict | None = None
         self.approval_answer = "deny"
         self.events: queue.Queue | None = None
+        self.run_id = data.get("run_id")
         self.baselines = {p: base64.b64decode(b) if b is not None else None for p, b in data.get("baselines", {}).items()}
         self.undo_hashes = data.get("undo_hashes", [])
         permission = Permission(ask=self.ask)
@@ -310,10 +314,17 @@ class WebSession:
         if self.cancel.is_set():
             raise TurnCancelled()
 
-    def emit(self, event: str, data: dict, guard=None):
-        if guard is not None and not guard.is_set():
+    def emit(self, event: str, data: dict, guard=None, run_id=None):
+        if guard is not None and (not guard.is_set() or self.run_id != run_id):
             return
         entry = {"type": event, **data, "at": time.time()}
+        target_run = run_id if guard is not None else self.run_id
+        if target_run is not None:
+            entry = self.service.runs.append(target_run, entry, guard=guard) if guard is not None else self.service.runs.append(target_run, entry)
+            if entry is None:
+                return
+        if guard is not None and (not guard.is_set() or self.run_id != run_id):
+            return
         if event not in {"token", "reasoning", "snapshot", "done"}:
             self.timeline.append(entry)
         if self.events is not None:
@@ -323,6 +334,7 @@ class WebSession:
         self.check_cancelled()
         self.approval_ready.clear()
         self.pending_permission = {"id": uuid.uuid4().hex, "name": name, "arguments": arguments}
+        self.service.runs.status(self.run_id, "waiting_permission")
         self.emit("permission", self.pending_permission)
         deadline = time.monotonic() + 300
         while not self.approval_ready.wait(0.25):
@@ -332,6 +344,7 @@ class WebSession:
                 self.emit("notice", {"message": "授权等待已超时，本次调用已拒绝。"})
                 return "deny"
         self.pending_permission = None
+        self.service.runs.status(self.run_id, "running")
         self.check_cancelled()
         return self.approval_answer
 
@@ -375,6 +388,7 @@ class WebSession:
             ],
             "cwd": self.cwd,
             "rule_sources": self.agent.rule_sources,
+            "run_id": self.run_id,
             "mode": self.mode,
             "plan_mode": self.agent.plan_mode,
             "tasks": self.agent._todo._tasks,
@@ -443,6 +457,7 @@ class Service:
         self.workspace = workspace.resolve()
         self.config = Config.from_env()
         self.store = store or Path.home() / ".corecoder" / "web" / hashlib.sha256(str(self.workspace).encode()).hexdigest()[:16]
+        self.runs = RunStore(self.store / "runs")
         self._llm_factory = llm_factory
         self.mcp_tools = load_mcp_tools() if extensions else []
         self.hooks = load_hooks() if extensions else None
@@ -467,6 +482,21 @@ class Service:
                     self.sessions[session.id] = session
                 except (ValueError, OSError, TypeError, KeyError, AttributeError):
                     continue
+
+        # A prior server process cannot safely resume a model request or tool.
+        for rid, run in list(self.runs.runs.items()):
+            if run['status'] not in TERMINAL:
+                session = self.sessions.get(run['session_id'])
+                if session:
+                    self.repair_pending(session.agent)
+                    session.pending_permission = None
+                    session.busy = False
+                    session.persist()
+                self.runs.status(rid, 'interrupted')
+                self.runs.append(rid, {'type': 'notice', 'message': '服务重启，任务已中断；未自动重试。', 'at': time.time()})
+                self.runs.append(rid, {'type': 'done', 'status': 'interrupted', 'at': time.time()})
+            elif not run['events'] or run['events'][-1].get('type') != 'done':
+                self.runs.append(rid, {'type': 'done', 'status': run['status'], 'at': time.time()})
 
     def make_llm(self):
         if self._llm_factory:
@@ -523,7 +553,7 @@ class Service:
         # method as a compatibility no-op for embedders that still call it.
         return session.state.checkpoint_store
 
-    def start(self, sid: str, prompt: str):
+    def start(self, sid: str, prompt: str, *, legacy_events=True):
         session = self.get(sid)
         if not prompt.strip() or len(prompt) > 100_000:
             raise RequestError("请输入 1–100000 个字符的任务。")
@@ -538,14 +568,23 @@ class Service:
         if session.archived:
             self.execution.release()
             raise RequestError("请先恢复已归档的对话。", 409)
-        session.busy = True
-        session.cancel.clear()
-        session.events = queue.Queue()
-        events = session.events
+        try:
+            session.run_id = self.runs.create(sid)
+            run_id = session.run_id
+            session.busy = True
+            session.cancel.clear()
+            session.events = queue.Queue() if legacy_events else None
+            events = session.events
+            session.persist()
+        except Exception:
+            session.busy = False
+            self.execution.release()
+            raise
         if session.title == "新对话":
             session.title = prompt.strip().replace("\n", " ")[:28]
 
         def run():
+            final_status = 'failed'
             try:
                 session.agent.state.cwd = Path(session.cwd).resolve()
                 session.emit("started", {"session_id": sid})
@@ -554,6 +593,7 @@ class Service:
                     on_token=lambda token: (session.check_cancelled(), session.emit("token", {"text": token})),
                     on_reasoning=lambda token: (session.check_cancelled(), session.emit("reasoning", {"text": token})),
                 )
+                final_status = result.status if result.status in TERMINAL else 'failed'
                 result_payload = {
                     "status": result.status,
                     "finish_reason": result.finish_reason,
@@ -576,6 +616,7 @@ class Service:
                     message = result.tool_errors[-1]["message"] if result.tool_errors else "Agent 运行失败。"
                     session.emit("error", {"message": str(message)[:1500], **result_payload})
             except (TurnCancelled, KeyboardInterrupt):
+                final_status = 'cancelled'
                 # Guard the protocol even if cancellation came from a callback.
                 self.repair_pending(session.agent)
                 session.emit("notice", {"message": "已停止后续步骤。已完成的文件修改仍然保留。"})
@@ -592,17 +633,24 @@ class Service:
                 session.updated_at = time.time()
                 try:
                     session.persist()
-                except OSError:
-                    session.emit("error", {"message": "对话已结束，但本地存档写入失败。"})
-                try:
-                    events.put({"type": "snapshot", "session": session.snapshot()})
+                    self.runs.status(session.run_id, final_status)
+                    session.emit("snapshot", {"session": session.snapshot()})
+                    session.emit("done", {"status": final_status})
+                except Exception:  # noqa: BLE001 - always release the execution lock
+                    try:
+                        self.runs.status(session.run_id, 'failed')
+                        session.emit("error", {"message": "任务状态保存失败。"})
+                        session.emit("done", {"status": "failed"})
+                    except Exception:  # noqa: BLE001, S110 - storage may be unavailable
+                        pass
+                    if events is not None:
+                        events.put({"type": "done", "status": "failed"})
                 finally:
-                    events.put({"type": "done"})
                     session.events = None
                     self.execution.release()
 
         threading.Thread(target=run, daemon=True).start()
-        return events
+        return events if legacy_events else run_id
 
     @staticmethod
     def repair_pending(agent):
@@ -670,6 +718,7 @@ class Service:
                         resolved = artifact.resolve()
                         if resolved == artifact.absolute() and resolved.is_relative_to(self.workspace):
                             shutil.rmtree(artifact)
+                    self.runs.delete_session(session.id)
                     (self.store / f"{session.id}.json").unlink(missing_ok=True)
                     del self.sessions[session.id]
                 return {"session": None, "notice": "已删除对话。", "sessions": self.summaries()}

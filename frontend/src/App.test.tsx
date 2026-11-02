@@ -10,11 +10,12 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import type { Bootstrap, Session } from "./types";
+import type { Bootstrap, Session, ToolEvent } from "./types";
 
 const mocks = vi.hoisted(() => ({
   api: vi.fn(),
   chat: vi.fn(),
+  followRun: vi.fn((_id: string, _callback: (event: ToolEvent) => void, _signal: AbortSignal) => new Promise<void>(() => {})),
   setToken: vi.fn(),
 }));
 
@@ -94,7 +95,8 @@ beforeEach(() => {
     value: 1280,
   });
   Element.prototype.scrollIntoView = vi.fn();
-  mocks.api.mockImplementation(async (path: string) => {
+  mocks.api.mockImplementation(async (path: string, body?: { id: string; prompt: string }) => {
+    if (path === "runs") return mocks.chat(body!.id, body!.prompt);
     if (path === "bootstrap") return bootstrap;
     if (path === "sessions")
       return Object.values(sessions).map(
@@ -155,7 +157,7 @@ describe("workbench composer behavior", () => {
     await user.click(screen.getByRole("button", { name: "发送任务" }));
     await user.clear(composer);
     await user.type(composer, "发送期间的新草稿");
-    await act(async () => rejectChat(new Error("会话正在运行")));
+    await act(async () => rejectChat(Object.assign(new Error("会话正在运行"), { name: "ApiError", status: 409 })));
     await waitFor(() =>
       expect((composer as HTMLTextAreaElement).value).toBe("发送期间的新草稿"),
     );
@@ -164,12 +166,9 @@ describe("workbench composer behavior", () => {
 
   it("uses suggestion text and synchronously blocks duplicate submits", async () => {
     let finish!: () => void;
-    mocks.chat.mockImplementation((_id, _prompt, _onEvent, accepted) => {
-      accepted?.();
-      return new Promise<void>((resolve) => {
-        finish = resolve;
-      });
-    });
+    mocks.chat.mockImplementation(() => new Promise((resolve) => {
+      finish = () => resolve({ id: "run-1" });
+    }));
     const user = userEvent.setup();
     render(<App />);
     await screen.findByLabelText("输入任务");
@@ -258,5 +257,34 @@ describe("workbench composer behavior", () => {
     expect((stopping as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("正在停止，等待当前步骤安全结束")).toBeTruthy();
     sessions.a.busy = false;
+  });
+});
+
+describe("run recovery", () => {
+  it("does not replay completed runs over current session", async () => {
+    const current = { ...session("a", "已重命名"), run_id: "old-run", messages: [] };
+    mocks.followRun.mockClear();
+    mocks.api.mockImplementation(async (path: string) => path === "bootstrap" ? { ...bootstrap, sessions: [current] } : path === "sessions" ? [current] : current);
+    render(<App />);
+    expect(await screen.findByRole("button", { name: /已重命名/ })).toBeTruthy();
+    expect(mocks.followRun).not.toHaveBeenCalled();
+  });
+  it("terminal reset displays only the current final answer", async () => {
+    const running = { ...session("a", "活动"), busy: true, run_id: "run-1" };
+    const finished = { ...running, busy: false, messages: [{ role: "assistant" as const, content: "唯一答案" }] };
+    let reads = 0;
+    mocks.api.mockImplementation(async (path: string) => path === "bootstrap" ? { ...bootstrap, sessions: [running] } : path === "sessions" ? [running] : reads++ === 0 ? running : finished);
+    mocks.followRun.mockImplementation((_id, callback) => { callback({ type: "reset", status: "completed", seq: 10, text: "唯一答案", session: finished }); return Promise.resolve(); });
+    render(<App />);
+    await waitFor(() => expect(screen.getAllByText("唯一答案")).toHaveLength(1));
+  });
+  it("does not restore an already resolved permission", async () => {
+    const running = { ...session("a", "活动"), busy: true, run_id: "run-2", pending_permission: null };
+    mocks.api.mockImplementation(async (path: string) => path === "bootstrap" ? { ...bootstrap, sessions: [running] } : path === "sessions" ? [running] : running);
+    mocks.followRun.mockClear();
+    mocks.followRun.mockImplementation((_id, callback) => { callback({ type: "permission", id: "old", name: "bash", arguments: { command: "old command" } }); return Promise.resolve(); });
+    render(<App />);
+    await waitFor(() => expect(mocks.followRun).toHaveBeenCalled());
+    expect(screen.queryByText("old command")).toBeNull();
   });
 });

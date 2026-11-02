@@ -24,7 +24,10 @@ export interface ToolEvent {
   text?: string;
   stream?: "stdout" | "stderr";
   command_id?: string;
+  run_id?: string;
   seq?: number;
+  reasoning?: string;
+  status?: string;
   command_status?: string;
   exit_code?: number | null;
   truncated?: boolean;
@@ -79,6 +82,7 @@ export interface Session extends SessionSummary {
   timeline: ToolEvent[];
   tool_outcomes: { call_id: string | null; status: ToolStatus }[];
   cwd: string;
+  run_id?: string | null;
   rule_sources?: { path: string; status: string; reason?: string }[];
   plan_mode: boolean;
   /** Older server snapshots only include plan_mode. */
