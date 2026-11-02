@@ -261,7 +261,7 @@ function ToolCard({
               ? "完成"
               : "";
   return (
-    <details
+    <details open={running || undefined}
       className={`tool-card ${running ? "running" : ""} ${status ? `status-${status}` : ""}`}
     >
       <summary>
@@ -781,7 +781,7 @@ export default function App() {
             setStreamText((text) => text + event.text);
           if (event.type === "reasoning")
             setReasoning((text) => text + event.text);
-          if (event.type === "tool_start" || event.type === "tool_result")
+          if (event.type === "tool_start" || event.type === "tool_output" || event.type === "tool_result")
             setLiveTools((events) => [...events, event]);
           if (event.type === "run_result" && event.runStatus)
             setRunResult({

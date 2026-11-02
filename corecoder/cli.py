@@ -118,6 +118,7 @@ def main():
     session_id = _normalize_session_id(args.resume)
     state = SessionState(session_id=session_id)
     state.rules_workspace_root = None
+    state.command_output = lambda stream, text, seq: print(text, end="", file=sys.stderr, flush=True)
     tools = [*create_tools(state), *load_mcp_tools()]
     agent_kwargs = {
         "llm": llm,

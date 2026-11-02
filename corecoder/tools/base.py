@@ -66,12 +66,13 @@ class Tool(ABC):
 class ToolOutcome:
     """Structured local outcome while the model receives only text."""
 
-    __slots__ = ("call_id", "content", "message", "name", "stage", "status", "warning")
+    __slots__ = ("call_id", "command_status", "content", "exit_code", "message", "name", "stage", "status", "truncated", "warning")
 
     def __init__(self, call_id, name, status, content, stage="execute", warning=None, message=None):
         self.call_id, self.name, self.status = call_id, name, status
         self.content, self.stage, self.warning = str(content), stage, warning
         self.message = message or self.content
+        self.command_status = self.exit_code = self.truncated = None
 
     def as_error(self):
         return self.status in {"failed", "refused", "cancelled", "unknown"}

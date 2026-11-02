@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
-[![engine](https://img.shields.io/badge/engine-2277_LoC-blue)](article/)
+[![engine](https://img.shields.io/badge/engine-2291_LoC-blue)](article/)
 [![源码导读](https://img.shields.io/badge/源码导读-8篇双语-orange)](article/)
 
 </div>
@@ -178,7 +178,7 @@ def chat(self, user_input):
 读懂之后，最自然的下一步就是 fork。起手不用伤筋动骨：
 
 - **换个你常用的模型。** 就是上面那两个环境变量，`llm.py`（526 行）是所有 provider 适配的入口。
-- **加一件你自己的工具。** 照 `tools/base.py`（77 行）的工具基类写个新文件，跑测试、抓网页、调 LSP 都行，第二篇文章末尾手把手带你写第一个。
+- **加一件你自己的工具。** 照 `tools/base.py`（78 行）的工具基类写个新文件，跑测试、抓网页、调 LSP 都行，第二篇文章末尾手把手带你写第一个。
 - **改系统提示词。** `prompt.py` 才 50 行，改一句就能看到 agent 的脾气变了，是门槛最低的「改一处就有反馈」。
 - **直接当库 import。** 顶层导出了 `Agent`、`LLM`、`Config`，能嵌进你自己的程序：
 

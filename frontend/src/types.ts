@@ -22,6 +22,12 @@ export interface ToolEvent {
   arguments?: Record<string, unknown>;
   result?: string;
   text?: string;
+  stream?: "stdout" | "stderr";
+  command_id?: string;
+  seq?: number;
+  command_status?: string;
+  exit_code?: number | null;
+  truncated?: boolean;
   message?: string;
   refused?: boolean;
   toolStatus?: ToolStatus;

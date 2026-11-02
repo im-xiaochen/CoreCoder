@@ -135,7 +135,17 @@ class BrowserAgent(Agent):
             if on_tool is not None:
                 return on_tool(name, arguments)
 
-        outcome = super()._run_tool_call(tc, notify_tool)
+        command_id = uuid.uuid4().hex
+        if tc.name == "bash":
+            self.state.command_cancel = self.session.cancel
+            self.state.command_output = lambda stream, text, seq: self.session.emit(
+                "tool_output", {"id": tc.id, "tool_call_id": tc.id, "command_id": command_id,
+                                "stream": stream, "text": text, "seq": seq})
+        try:
+            outcome = super()._run_tool_call(tc, notify_tool)
+        finally:
+            if tc.name == "bash":
+                self.state.command_output = None
         if not isinstance(outcome, ToolOutcome):
             outcome = ToolOutcome(tc.id, tc.name, "failed", str(outcome), "execute")
         self.session.emit(
@@ -145,6 +155,10 @@ class BrowserAgent(Agent):
                 "name": tc.name,
                 "result": outcome.content[:24000],
                 "status": outcome.status,
+                "command_id": command_id if tc.name == "bash" else None,
+                "command_status": outcome.command_status,
+                "exit_code": outcome.exit_code,
+                "truncated": outcome.truncated,
                 "stage": outcome.stage,
                 "warning": outcome.warning,
                 # Preserve the old field for consumers that only understand
