@@ -56,11 +56,14 @@ class SessionState:
 
     def fork(self) -> "SessionState":
         """Create an isolated child state at the parent's current directory."""
-        return SessionState(
+        child = SessionState(
             workspace_root=self.workspace_root,
             cwd=self.cwd,
             parent_session_id=self.session_id,
         )
+        if hasattr(self, "rules_workspace_root"):
+            child.rules_workspace_root = self.rules_workspace_root
+        return child
 
     def record_outcome(
         self, call_id: str, tool_name: str, status: str, arguments=None, result: str = "", artifact_path: str | None = None,

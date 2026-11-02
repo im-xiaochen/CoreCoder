@@ -677,6 +677,10 @@ export default function App() {
           if (next) {
             const loaded = await api<Session>(`session?id=${next.id}`);
             applySession(loaded); localStorage.setItem("corecoder-session", loaded.id);
+            const restored = readDraft(localStorage, boot?.workspace || "", loaded.id);
+            setDraft(restored); draftRef.current = restored;
+            setStreamText(""); setReasoning(""); setLiveTools([]);
+            autoScroll.current = true;
           } else { setSession(null); sessionRef.current = null; localStorage.removeItem("corecoder-session"); }
         }
       }
@@ -1622,6 +1626,10 @@ export default function App() {
                     <ShieldCheck size={14} />
                   </div>
                 </section>
+                <div className="panel-section-heading">项目规则</div>
+                {session?.rule_sources?.length ? session.rule_sources.map((rule) => (
+                  <div key={rule.path} title={rule.path}><code>{rule.path}</code> — {rule.status === "loaded" ? "已加载" : `已跳过：${rule.reason || "不可读取"}`}</div>
+                )) : <p>{sessionMode(session) === "chat" ? "聊天模式不读取项目规则" : "运行任务后显示规则来源"}</p>}
                 <div className="panel-section-heading">
                   <ListChecks size={14} />
                   任务清单<span>{session?.tasks.length || 0}</span>

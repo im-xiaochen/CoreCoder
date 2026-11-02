@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
-[![engine](https://img.shields.io/badge/engine-2266_LoC-blue)](article/)
+[![engine](https://img.shields.io/badge/engine-2277_LoC-blue)](article/)
 [![源码导读](https://img.shields.io/badge/源码导读-8篇双语-orange)](article/)
 
 </div>
@@ -306,3 +306,5 @@ REPL 里 `/plan` 开关计划模式。开着的时候，提示符变成 `(plan)`
 作者 [何宇峰](https://github.com/he-yufeng)，曾任职 Moonshot AI (Kimi)。早前写过一篇相当完整的 [Claude Code 源码分析](article/claude-code-source-analysis.md)，这个项目是它的动手版：那篇带你读懂，这个带你重建。
 
 > CoreCoder 原名 NanoCoder，为避免和 [Nano-Collective/nanocoder](https://github.com/Nano-Collective/nanocoder) 混淆而改名，旧链接会自动跳到这里。
+
+项目规则：编程和计划模式加载工作区根目录至当前目录的 `AGENTS.md`；聊天模式不读取。可用 `/rules` 或网页工作区面板查看来源。
