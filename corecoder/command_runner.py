@@ -2,6 +2,7 @@
 import codecs
 import json
 import os
+import queue
 import signal
 import subprocess
 import sys
@@ -89,6 +90,24 @@ def run_command(command, cwd, timeout=120, cancel=None, on_output=None):
     truncated = False
     sequence = 0
     closed = False
+    output_queue = queue.Queue(maxsize=256)
+    output_finished = threading.Event()
+
+    def dispatch_output():
+        while not output_finished.is_set():
+            try:
+                event = output_queue.get(timeout=.05)
+            except queue.Empty:
+                continue
+            try:
+                on_output(*event)
+            except Exception:  # noqa: BLE001, S110 - display failures cannot affect execution
+                pass
+
+    output_thread = None
+    if on_output:
+        output_thread = threading.Thread(target=dispatch_output, daemon=True)
+        output_thread.start()
 
     def read_pipe(name, pipe):
         nonlocal used, truncated, sequence
@@ -115,9 +134,9 @@ def run_command(command, cwd, timeout=120, cancel=None, on_output=None):
                             sequence += 1
                             if on_output:
                                 try:
-                                    on_output(name, kept, sequence)
-                                except Exception:  # noqa: BLE001, S110 - display failures cannot block pipe draining
-                                    pass
+                                    output_queue.put_nowait((name, kept, sequence))
+                                except queue.Full:
+                                    truncated = True
                 if not data:
                     break
         except (OSError, ValueError):
@@ -189,6 +208,18 @@ def run_command(command, cwd, timeout=120, cancel=None, on_output=None):
             status = 'unknown'
         with lock:
             closed = True
+        if output_thread and status == 'exited':
+            deadline = time.monotonic() + .2
+            while not output_queue.empty() and time.monotonic() < deadline:
+                time.sleep(.005)
+            output_finished.set()
+            output_thread.join(timeout=max(0, deadline - time.monotonic()))
+            if output_thread.is_alive() or not output_queue.empty():
+                truncated = True
+        else:
+            output_finished.set()
+            if output_thread and (output_thread.is_alive() or not output_queue.empty()):
+                truncated = True
     if interrupted:
         # Preserve cancellation even if process cleanup could not be verified.
         error = KeyboardInterrupt()
