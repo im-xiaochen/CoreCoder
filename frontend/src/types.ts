@@ -49,6 +49,7 @@ export interface Message {
 export interface SessionSummary {
   id: string;
   title: string;
+  archived?: boolean;
   updated_at: number;
   model: string;
   busy: boolean;

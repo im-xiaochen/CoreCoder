@@ -8,6 +8,7 @@ import hashlib
 import inspect
 import json
 import queue
+import shutil
 import threading
 import time
 import uuid
@@ -213,6 +214,7 @@ class WebSession:
         self.service = service
         self.id = data.get("id", uuid.uuid4().hex)
         self.title = data.get("title", "新对话")
+        self.archived = data.get("archived", False) is True
         self.updated_at = data.get("updated_at", time.time())
         self.cwd = data.get("cwd", str(service.workspace))
         if not Path(self.cwd).is_dir() or not Path(self.cwd).resolve().is_relative_to(service.workspace):
@@ -316,6 +318,7 @@ class WebSession:
         return {
             "id": self.id,
             "title": self.title,
+            "archived": self.archived,
             "updated_at": self.updated_at,
             "model": self.agent.llm.model,
             "busy": self.busy,
@@ -486,11 +489,11 @@ class Service:
 
     def create(self):
         with self.lock:
-            if len(self.sessions) >= 100:
+            if sum(not s.archived for s in self.sessions.values()) >= 100:
                 raise RequestError("已达到 100 个本地对话，请先删除不需要的对话。")
             session = WebSession(self)
-            self.sessions[session.id] = session
             session.persist()
+            self.sessions[session.id] = session
             return session.snapshot()
 
     def bind_checkpoints(self, session):
@@ -506,6 +509,13 @@ class Service:
             raise RequestError("请在项目 .env 中填写 API Key，随后重启网页服务。")
         if not self.execution.acquire(blocking=False):
             raise RequestError("另一个任务仍在运行，请完成或停止后重试。", 409)
+        with self.lock:
+            if self.sessions.get(sid) is not session:
+                self.execution.release()
+                raise RequestError("对话不存在。", 404)
+        if session.archived:
+            self.execution.release()
+            raise RequestError("请先恢复已归档的对话。", 409)
         session.busy = True
         session.cancel.clear()
         session.events = queue.Queue()
@@ -598,9 +608,50 @@ class Service:
         if not self.execution.acquire(blocking=False):
             raise RequestError("任务执行期间不能修改会话设置。", 409)
         try:
+            with self.lock:
+                if self.sessions.get(sid) is not session:
+                    raise RequestError("对话不存在。", 404)
             action = data.get("action")
             notice = ""
-            if action == "mode":
+            if action == "rename":
+                title = data.get("title")
+                if not isinstance(title, str) or not 1 <= len(title.strip()) <= 200:
+                    raise RequestError("标题须为 1–200 个字符。")
+                session.title = title.strip()
+                notice = "已重命名对话。"
+            elif action in {"archive", "restore"}:
+                with self.lock:
+                    if session.busy:
+                        raise RequestError("运行中的对话不能归档。", 409)
+                    if action == "restore" and session.archived and sum(not s.archived for s in self.sessions.values()) >= 100:
+                        raise RequestError("已达到 100 个活动对话，请先整理。", 409)
+                    old = session.archived
+                    session.archived = action == "archive"
+                    try:
+                        session.persist()
+                    except Exception:
+                        session.archived = old
+                        raise
+                notice = "已归档对话。" if session.archived else "已恢复对话。"
+            elif action == "delete":
+                with self.lock:
+                    if session.busy:
+                        raise RequestError("运行中的对话不能删除。", 409)
+                    # Only paths generated from the internal session ID are removed.
+                    checkpoint = session.state.checkpoint_store
+                    for path in (checkpoint.path, checkpoint.journal):
+                        path.unlink(missing_ok=True)
+                    artifact = self.workspace / ".corecoder-artifacts" / session.id
+                    parent = artifact.parent
+                    is_link = lambda path: path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction())
+                    if not is_link(parent) and not is_link(artifact) and artifact.is_dir():
+                        resolved = artifact.resolve()
+                        if resolved == artifact.absolute() and resolved.is_relative_to(self.workspace):
+                            shutil.rmtree(artifact)
+                    (self.store / f"{session.id}.json").unlink(missing_ok=True)
+                    del self.sessions[session.id]
+                return {"session": None, "notice": "已删除对话。", "sessions": self.summaries()}
+            elif action == "mode":
                 try:
                     session.set_mode(data.get("mode"))
                 except ValueError as exc:

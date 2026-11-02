@@ -342,6 +342,7 @@ export default function App() {
   const [connectionError, setConnectionError] = useState("");
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [sidebar, setSidebar] = useState(() => window.innerWidth >= 700);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const [inspector, setInspector] = useState(false);
@@ -504,8 +505,8 @@ export default function App() {
         setSessions(value.sessions);
         const previous = localStorage.getItem("corecoder-session");
         const id =
-          value.sessions.find((s) => s.id === previous)?.id ||
-          value.sessions[0]?.id;
+          value.sessions.find((s) => s.id === previous && !s.archived)?.id ||
+          value.sessions.find((s) => !s.archived)?.id;
         const current = id
           ? await api<Session>(`session?id=${id}`)
           : await api<Session>("sessions", {});
@@ -654,6 +655,34 @@ export default function App() {
       pendingActionRef.current = false;
       setMoreMenu(false);
     }
+  };
+
+  const manageSession = async (item: SessionSummary, name: "rename" | "archive" | "restore" | "delete" | "save") => {
+    if (busyRef.current || pendingActionRef.current || sendingRef.current) return;
+    let title: string | undefined;
+    if (name === "rename") {
+      const input = window.prompt("对话标题（1–200 字符）", item.title);
+      if (input === null) return;
+      title = input;
+    }
+    if (name === "delete" && !window.confirm(`删除对话“${item.title}”？此操作无法撤销。`)) return;
+    setPendingAction(true); pendingActionRef.current = true;
+    try {
+      const result = await api<{ session: Session | null; notice: string; sessions: SessionSummary[] }>("action", { id: item.id, action: name, title });
+      setSessions(result.sessions);
+      if (item.id === sessionRef.current?.id) {
+        if (result.session) applySession(result.session);
+        else {
+          const next = result.sessions.find((s) => !s.archived);
+          if (next) {
+            const loaded = await api<Session>(`session?id=${next.id}`);
+            applySession(loaded); localStorage.setItem("corecoder-session", loaded.id);
+          } else { setSession(null); sessionRef.current = null; localStorage.removeItem("corecoder-session"); }
+        }
+      }
+      flash(result.notice);
+    } catch (e) { flash((e as Error).message, true); }
+    finally { setPendingAction(false); pendingActionRef.current = false; }
   };
 
   const send = async (e?: FormEvent) => {
@@ -875,7 +904,7 @@ export default function App() {
     ),
   );
   const filtered = sessions.filter((s) =>
-    s.title.toLowerCase().includes(search.toLowerCase()),
+    !!s.archived === showArchived && s.title.toLowerCase().includes(search.toLowerCase()),
   );
   const idleDisabled =
     busy || pendingAction || sending || initializing || !!connectionError;
@@ -955,13 +984,13 @@ export default function App() {
           <ChevronDown size={13} />
         </button>
         <div className="sidebar-section-label conversation-label">
-          对话<span>{sessions.length}</span>
+          <button onClick={() => setShowArchived(!showArchived)}>{showArchived ? "已归档（查看活动）" : "活动对话（查看归档）"}</button><span>{filtered.length}</span>
         </div>
         <nav className="conversation-list" aria-label="对话历史">
           {filtered.map((s) => (
+            <div key={s.id}>
             <button
               className={`conversation ${s.id === session?.id ? "selected" : ""}`}
-              key={s.id}
               onClick={() => loadSession(s.id)}
               disabled={idleDisabled}
             >
@@ -973,6 +1002,13 @@ export default function App() {
               <span>{s.title}</span>
               {s.id === session?.id && <span className="selected-dot" />}
             </button>
+            <div className="conversation-actions">
+              <button disabled={idleDisabled} onClick={() => void manageSession(s, "rename")}>重命名</button>
+              <button disabled={idleDisabled} onClick={() => void manageSession(s, s.archived ? "restore" : "archive")}>{s.archived ? "恢复" : "归档"}</button>
+              <button disabled={idleDisabled} onClick={() => void manageSession(s, "save")}>导出</button>
+              <button disabled={idleDisabled} onClick={() => void manageSession(s, "delete")}>删除</button>
+            </div>
+            </div>
           ))}
           {!filtered.length && (
             <div className="no-conversations">
