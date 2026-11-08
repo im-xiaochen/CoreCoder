@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 from prompt_toolkit import prompt as pt_prompt
 from prompt_toolkit.history import FileHistory
@@ -303,6 +304,31 @@ def _repl(agent: Agent, config: Config):
         if user_input == "/help":
             _show_help()
             continue
+        if user_input == '/checks' or user_input.startswith('/check '):
+            from .project_checks import CheckError, ProjectChecks
+            if getattr(agent, 'chat_mode', False):
+                console.print('Project checks are unavailable in chat mode.')
+                continue
+            try:
+                checks = ProjectChecks(agent.state.workspace_root, Path.home() / '.corecoder' / 'checks' / agent.state.session_id)
+                config_view = checks.inspect()
+                if user_input == '/checks':
+                    for item in config_view['checks']:
+                        console.print(f"{item['id']}: {item['name']} | cwd={item['cwd']} | {item['command']}", markup=False)
+                    if not config_view['checks']: console.print('No configured checks.')
+                elif agent.plan_mode:
+                    console.print('Checks cannot run in plan mode.')
+                else:
+                    check_id = user_input.split(maxsplit=1)[1]
+                    selected = checks.select([check_id])['checks'][0]
+                    console.print(f"Run {selected['command']} in {selected['cwd']}?", markup=False)
+                    if pt_prompt('Confirm [y/N] ').strip().lower() == 'y':
+                        result = checks.run(check_id, config_view['token'], authorized=True)
+                        console.print(f"{result['status']} (exit {result['exit_code']}, result {result['id']})")
+                        console.print(result['stdout'], result['stderr'], markup=False)
+            except (CheckError, OSError) as exc:
+                console.print(f'Check error: {exc}', markup=False)
+            continue
         if user_input == "/rules":
             agent._full_messages()
             for rule in agent.rule_sources:
@@ -563,3 +589,4 @@ def _show_help():
 def _brief(kwargs: dict, maxlen: int = 80) -> str:
     s = ", ".join(f"{k}={repr(v)[:40]}" for k, v in kwargs.items())
     return s[:maxlen] + ("..." if len(s) > maxlen else "")
+

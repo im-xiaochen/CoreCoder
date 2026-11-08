@@ -16,10 +16,12 @@ from pathlib import Path
 
 from corecoder import Agent, Config, SessionState
 from corecoder.context import estimate_tokens, output_reserve_for
+from corecoder.git_workspace import GitWorkspace, GitWorkspaceError
 from corecoder.hooks import load_hooks
 from corecoder.llm import LLM, LiteLLM
 from corecoder.mcp import load_mcp_tools
 from corecoder.permissions import Permission
+from corecoder.project_checks import ProjectChecks
 from corecoder.session import list_sessions, load_session_full, save_session
 from corecoder.tools.agent import AgentTool
 from corecoder.tools.base import Tool, ToolOutcome
@@ -251,6 +253,8 @@ class WebSession:
         self.approval_answer = "deny"
         self.events: queue.Queue | None = None
         self.run_id = data.get("run_id")
+        self.git_baseline = data.get("git_baseline")
+        self.git_baseline_run_id = data.get("git_baseline_run_id")
         self.baselines = {p: base64.b64decode(b) if b is not None else None for p, b in data.get("baselines", {}).items()}
         self.undo_hashes = data.get("undo_hashes", [])
         permission = Permission(ask=self.ask)
@@ -442,6 +446,8 @@ class WebSession:
             "completion_tokens": self.agent.llm.total_completion_tokens,
             "baselines": {p: base64.b64encode(b).decode("ascii") if b is not None else None for p, b in self.baselines.items()},
             "undo_hashes": self.undo_hashes,
+            "git_baseline": self.git_baseline,
+            "git_baseline_run_id": self.git_baseline_run_id,
         }
         if hasattr(self.agent.llm, "usage_ledger"):
             data["schema_version"] = 3
@@ -458,6 +464,8 @@ class Service:
         self.config = Config.from_env()
         self.store = store or Path.home() / ".corecoder" / "web" / hashlib.sha256(str(self.workspace).encode()).hexdigest()[:16]
         self.runs = RunStore(self.store / "runs")
+        self.project_checks = ProjectChecks(self.workspace, self.store / 'checks')
+        self.project_checks.recover()
         self._llm_factory = llm_factory
         self.mcp_tools = load_mcp_tools() if extensions else []
         self.hooks = load_hooks() if extensions else None
@@ -553,6 +561,113 @@ class Service:
         # method as a compatibility no-op for embedders that still call it.
         return session.state.checkpoint_store
 
+    def git_action(self, sid, action, data=None):
+        session = self.get(sid)
+        data = data or {}
+        mutation = action in {'stage', 'commit'}
+        if mutation and (session.mode != 'code' or data.get('confirm') is not True):
+            raise RequestError('请在编程模式中明确确认操作。', 403)
+        if mutation and not self.execution.acquire(blocking=False):
+            raise RequestError('任务正在运行。', 409)
+        try:
+            with self.lock:
+                if self.sessions.get(sid) is not session or session.archived:
+                    raise RequestError('对话不存在或已归档。', 409)
+                if mutation and session.mode != 'code':
+                    raise RequestError('请在编程模式中执行。', 403)
+            git = GitWorkspace(self.workspace)
+            if action == 'status':
+                baseline = session.git_baseline if session.git_baseline_run_id == session.run_id else None
+                return git.status(baseline)
+            if action == 'diff':
+                if not isinstance(data.get('path'), str): raise RequestError('请选择文件。')
+                return git.diff(data['path'], staged=data.get('staged') is True)
+            paths, token = data.get('paths'), data.get('review_token')
+            if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths) or not isinstance(token, str):
+                raise RequestError('请选择文件并重新审阅。')
+            if action == 'stage': return git.stage(paths, token)
+            if action == 'commit':
+                message = data.get('message')
+                if not isinstance(message, str) or not 0 < len(message.strip()) <= 10000:
+                    raise RequestError('提交信息须为 1–10000 个字符。')
+                return git.commit(paths, token, message)
+            raise RequestError('未知 Git 操作。', 404)
+        except (GitWorkspaceError, OSError) as exc:
+            raise RequestError('Git 操作失败：' + str(exc)[:500], 409) from exc
+        finally:
+            if mutation: self.execution.release()
+
+    def checks_start(self, sid, data):
+        session = self.get(sid)
+        if data.get('confirm') is not True: raise RequestError('请明确授权运行检查。', 403)
+        if not self.execution.acquire(blocking=False): raise RequestError('另一个任务正在运行。', 409)
+        rid = None
+        old_run = session.run_id
+        try:
+            with self.lock:
+                if self.sessions.get(sid) is not session or session.archived or session.mode != 'code':
+                    raise RequestError('请在活动对话的编程模式运行检查。', 403)
+            ids, files, token = data.get('check_ids'), data.get('files'), data.get('token')
+            if not isinstance(ids, list) or not ids: raise RequestError('请选择检查。')
+            selection = self.project_checks.select(ids, files)
+            if selection['token'] != token: raise RequestError('配置已变化，请重新审阅。', 409)
+            if not selection['checks']: raise RequestError('没有匹配的检查。', 400)
+            rid = self.runs.create(sid)
+            session.run_id = rid
+            session.busy = True
+            session.cancel.clear()
+            session.persist()
+        except Exception as exc:
+            session.busy = False
+            session.run_id = old_run
+            if rid:
+                try:
+                    self.runs.append(rid, {'type': 'error', 'message': str(exc)[:500], 'at': time.time()})
+                    self.runs.status(rid, 'failed')
+                    self.runs.append(rid, {'type': 'done', 'status': 'failed', 'at': time.time()})
+                except Exception: pass  # noqa: BLE001, S110 - preserve original startup error
+            self.execution.release()
+            raise
+        def run_checks():
+            status = 'completed'
+            try:
+                session.emit('started', {'session_id': sid})
+                for check in selection['checks']:
+                    if session.cancel.is_set():
+                        status = 'cancelled'
+                        break
+                    result = self.project_checks.run(check['id'], token, authorized=True, files=files, run_id=rid, session_id=sid, cancel=session.cancel)
+                    session.emit('check_result', {k: v for k, v in result.items() if k not in ('stdout', 'stderr')})
+                    if result['status'] == 'cancelled': status = 'cancelled'; break
+                    if result['status'] != 'passed': status = 'failed'
+            except Exception as exc:  # noqa: BLE001 - worker boundary
+                status = 'failed'
+                session.emit('error', {'message': str(exc)[:500]})
+            finally:
+                session.busy = False
+                try:
+                    try: session.persist()
+                    except Exception as exc:  # noqa: BLE001 - persistence boundary
+                        status = 'failed'
+                        self.runs.append(rid, {'type': 'error', 'message': str(exc)[:500], 'at': time.time()})
+                    self.runs.status(rid, status)
+                    session.emit('done', {'status': status})
+                finally:
+                    self.execution.release()
+        try:
+            threading.Thread(target=run_checks, daemon=True).start()
+        except Exception as exc:
+            session.busy = False
+            session.run_id = old_run
+            try:
+                self.runs.append(rid, {'type': 'error', 'message': str(exc)[:500], 'at': time.time()})
+                self.runs.status(rid, 'failed')
+                self.runs.append(rid, {'type': 'done', 'status': 'failed', 'at': time.time()})
+                session.persist()
+            finally: self.execution.release()
+            raise
+        return self.runs.view(rid)
+
     def start(self, sid: str, prompt: str, *, legacy_events=True):
         session = self.get(sid)
         if not prompt.strip() or len(prompt) > 100_000:
@@ -571,6 +686,13 @@ class Service:
         try:
             session.run_id = self.runs.create(sid)
             run_id = session.run_id
+            session.git_baseline = None
+            session.git_baseline_run_id = run_id
+            if session.mode != 'chat':
+                try:
+                    session.git_baseline = GitWorkspace(self.workspace).baseline()
+                except (GitWorkspaceError, OSError):
+                    pass
             session.busy = True
             session.cancel.clear()
             session.events = queue.Queue() if legacy_events else None
@@ -810,3 +932,4 @@ class Service:
     @staticmethod
     def saved_sessions():
         return list_sessions()
+
