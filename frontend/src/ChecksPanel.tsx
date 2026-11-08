@@ -5,7 +5,7 @@ import type { ToolEvent } from './types';
 type Check = { id: string; name: string; command: string; cwd: string; timeout: number; files: string[] };
 type Config = { configured: boolean; token: string | null; checks: Check[] };
 type Result = { id: string; check_id: string; status: string; exit_code: number | null; stdout: string; stderr: string; truncated: boolean };
-export function ChecksPanel({ id, writable, events, onStarted }: { id: string; writable: boolean; events: ToolEvent[]; onStarted: () => Promise<void> }) {
+export function ChecksPanel({ id, writable, events, liveOutput, onStarted }: { id: string; writable: boolean; events: ToolEvent[]; liveOutput?: { id: string; text: string } | null; onStarted: () => Promise<void> }) {
   const [config, setConfig] = useState<Config | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [files, setFiles] = useState('');
@@ -36,7 +36,8 @@ export function ChecksPanel({ id, writable, events, onStarted }: { id: string; w
       <label>可选文件路径，每行一个<textarea value={files} onChange={e => setFiles(e.target.value)} /></label>
       <button className="button secondary" disabled={!writable || pending || uncertain || !selected.length} onClick={() => void start()}>授权并运行所选检查</button>{uncertain && <p>启动结果不确定，请刷新页面后查看历史记录。</p>}
     </>}
-    <h4>检查记录</h4><button onClick={() => { void api<ToolEvent[]>(`checks/history?id=${encodeURIComponent(id)}`).then(setHistory).catch(e => setError(String(e))); }}>刷新历史</button>{[...history, ...events.filter(e => e.type === 'check_result')].filter((e, i, all) => e.id && all.findIndex(x => x.id === e.id) === i).map(e => <p key={e.id}><button onClick={() => void show(e.id!)}>{e.id?.slice(0, 8)} · {e.status} · 退出码 {e.exit_code ?? '无'}</button></p>)}
+    {liveOutput && <><h4>运行中输出 · {liveOutput.id.slice(0, 8)}</h4><pre className="diff-lines">{liveOutput.text}</pre></>}
+    <h4>检查记录</h4><button onClick={() => { void api<ToolEvent[]>(`checks/history?id=${encodeURIComponent(id)}`).then(setHistory).catch(e => setError(String(e))); }}>刷新历史</button>{[...events.filter(e => e.type === 'check_result'), ...history].filter((e, i, all) => e.id && all.findIndex(x => x.id === e.id) === i).map(e => <p key={e.id}><button onClick={() => void show(e.id!)}>{e.id?.slice(0, 8)} · {e.status} · 退出码 {e.exit_code ?? '无'}</button></p>)}
     {result && <div><p>{result.check_id}：{result.status} · 退出码 {result.exit_code ?? '无'} {result.truncated ? '· 日志已截断' : ''}</p><pre className="diff-lines">{result.stdout}</pre><pre className="diff-lines">{result.stderr}</pre></div>}
   </section>;
 }

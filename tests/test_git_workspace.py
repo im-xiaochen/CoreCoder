@@ -59,3 +59,31 @@ class GitWorkspaceTests(unittest.TestCase):
                 repo.commit(["new"], state["review_token"], "rename")
             result = repo.commit(["old", "new"], state["review_token"], "rename")
             self.assertTrue(result["commit"])
+
+    def test_commit_uses_global_and_explicit_identity(self):
+        import os
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            config = root / "global.gitconfig"
+            config.write_text("[user]\n name = Global Person\n email = global@example.invalid\n", encoding="utf-8")
+            subprocess.run(["git", "init", str(root)], check=True, capture_output=True)
+            (root / "a").write_text("content")
+            with patch.dict(
+                os.environ,
+                {
+                    "GIT_CONFIG_GLOBAL": str(config),
+                    "GIT_AUTHOR_NAME": "Author Override",
+                    "GIT_AUTHOR_EMAIL": "author@example.invalid",
+                },
+                clear=False,
+            ):
+                repo = GitWorkspace(root)
+                state = repo.status()
+                state = repo.stage(["a"], state["review_token"])
+                repo.commit(["a"], state["review_token"], "identity")
+                output = subprocess.run(
+                    ["git", "show", "-s", "--format=%an <%ae>|%cn <%ce>"], cwd=root, check=True, capture_output=True, text=True
+                ).stdout.strip()
+            self.assertEqual(output, "Author Override <author@example.invalid>|Global Person <global@example.invalid>")

@@ -120,7 +120,7 @@ class ProjectChecks:
         ]
         return {**config, "checks": selected}
 
-    def run(self, check_id, token, *, authorized=False, files=None, run_id=None, session_id=None, cancel=None):
+    def run(self, check_id, token, *, authorized=False, files=None, run_id=None, session_id=None, cancel=None, on_progress=None):
         if authorized is not True:
             raise CheckError("Explicit authorization required")
         selection = self.select([check_id], files)
@@ -155,11 +155,93 @@ class ProjectChecks:
             self._save(record)
             self._active.add(ident)
         interrupted = None
+        progress_lock = threading.Lock()
+        progress_open = True
+        progress_error = []
+        pending_output = []
+        last_flush = 0.0
+        output_bytes = 0
+        flush_timer = None
+
+        def progress(stream, text, sequence):
+            nonlocal progress_open, last_flush, output_bytes, flush_timer
+            with progress_lock:
+                if not progress_open or (not text and not pending_output):
+                    return
+                if text:
+                    remaining = max(0, 2 * 1024 * 1024 - output_bytes)
+                    kept = text.encode("utf-8")[:remaining].decode("utf-8", "ignore")
+                    record[stream] += kept
+                    output_bytes += len(kept.encode("utf-8"))
+                    pending_output.append(kept)
+                    record["truncated"] |= len(kept.encode("utf-8")) < len(text.encode("utf-8"))
+                    record["output_sequence"] = sequence
+                if text and last_flush and sum(map(len, pending_output)) < 65536 and time.monotonic() - last_flush < 0.25:
+                    if flush_timer is None:
+                        flush_timer = threading.Timer(0.25, lambda: progress("mixed", "", sequence))
+                        flush_timer.daemon = True
+                        flush_timer.start()
+                    return
+                if flush_timer is not None:
+                    flush_timer.cancel()
+                    flush_timer = None
+                try:
+                    self._save(record)
+                except Exception as exc:  # noqa: BLE001 - persist failure must be visible
+                    progress_error.append(str(exc)[:1000])
+                    return
+                event = {
+                    "id": ident,
+                    "check_id": check_id,
+                    "run_id": run_id,
+                    "session_id": session_id,
+                    "stream": "mixed",
+                    "text": "".join(pending_output),
+                    "output_sequence": record["output_sequence"],
+                    "truncated": record["truncated"],
+                }
+                pending_output.clear()
+                last_flush = time.monotonic()
+            if on_progress:
+                on_progress(event)
+
+        def mark_truncated():
+            with progress_lock:
+                if not progress_open:
+                    return
+                record["truncated"] = True
+                try:
+                    self._save(record)
+                except Exception as exc:  # noqa: BLE001 - persist failure must be visible
+                    progress_error.append(str(exc)[:1000])
+                    return
+                event = {
+                    "id": ident,
+                    "check_id": check_id,
+                    "run_id": run_id,
+                    "session_id": session_id,
+                    "stream": "mixed",
+                    "text": "",
+                    "output_sequence": record.get("output_sequence", 0),
+                    "truncated": True,
+                }
+            if on_progress:
+                on_progress(event)
+
         try:
             if cancel is not None and cancel.is_set():
                 record.update(status="cancelled", command_status="cancelled")
             else:
-                result = run_command(check["command"], str(cwd), timeout=check["timeout"], cancel=cancel)
+                result = run_command(
+                    check["command"],
+                    str(cwd),
+                    timeout=check["timeout"],
+                    cancel=cancel,
+                    on_output=progress,
+                    on_truncated=mark_truncated,
+                )
+                with progress_lock:
+                    progress_open = False
                 status = ("passed" if result.exit_code == 0 else "failed") if result.status == "exited" else result.status
                 record.update(
                     status=status,
@@ -174,7 +256,14 @@ class ProjectChecks:
             record.update(status=status, command_status=status)
             interrupted = exc
         except Exception as exc:  # noqa: BLE001 - persist unexpected runner failures
-            record.update(status="unknown", command_status="unknown", stderr=str(exc)[:8192])
+            record.update(status="unknown", command_status="unknown", error=str(exc)[:8192])
+        with progress_lock:
+            progress_open = False
+            if flush_timer is not None:
+                flush_timer.cancel()
+            if progress_error:
+                record["status"] = "unknown"
+                record["persistence_error"] = progress_error[-1]
         record["ended_at"] = time.time()
         with self._lock:
             try:
@@ -202,7 +291,15 @@ class ProjectChecks:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
                 json.dump(record, stream, ensure_ascii=False)
-            os.replace(name, target)
+            deadline = time.monotonic() + 1.0
+            while True:
+                try:
+                    os.replace(name, target)
+                    break
+                except OSError as exc:
+                    if getattr(exc, "winerror", None) not in {5, 32, 33} or time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.02)
         finally:
             if os.path.exists(name):
                 os.unlink(name)
@@ -259,4 +356,3 @@ class ProjectChecks:
             except CheckError:
                 continue
         return sorted(records, key=lambda r: r.get("started_at", 0), reverse=True)[:200]
-

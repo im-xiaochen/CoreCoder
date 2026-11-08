@@ -15,3 +15,7 @@
 2026-11-08 最终收尾完成：Python 受影响回归一次 158 passed；前端 81 项测试、生产构建、CI 范围 Ruff 与编译通过。三模块 review 与独立验收均通过，当前无未关闭已证实缺陷。完整命令、hash、历史失败和覆盖局限见 ACCEPTANCE.md。未重跑旧整套测试；本批改动保留在本地工作区。
 
 验证按本批功能及受影响风险执行；复用上批既有证据，不重复运行无关整套测试。修复后仅复验受影响范围。实际通过结论由 REVIEW.md 与 ACCEPTANCE.md 记录。
+
+2026-11-08: PR #13 review fixes for Git identity and live check logs are awaiting final independent acceptance.
+
+2026-11-08: PR #13 review fixes passed independent acceptance; awaiting CI and merge.

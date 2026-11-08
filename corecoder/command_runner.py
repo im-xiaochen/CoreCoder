@@ -24,7 +24,7 @@ class CommandResult:
     truncated: bool
 
 
-def run_command(command, cwd, timeout=120, cancel=None, on_output=None):
+def run_command(command, cwd, timeout=120, cancel=None, on_output=None, on_truncated=None):
     start = time.monotonic()
     bash = _git_bash()
     args = [bash, '-c', _posixify_drive_paths(command)] if bash else command
@@ -92,9 +92,17 @@ def run_command(command, cwd, timeout=120, cancel=None, on_output=None):
     closed = False
     output_queue = queue.Queue(maxsize=256)
     output_finished = threading.Event()
+    truncation_notice = threading.Event()
 
     def dispatch_output():
         while not output_finished.is_set():
+            if truncation_notice.is_set():
+                truncation_notice.clear()
+                try:
+                    if on_truncated:
+                        on_truncated()
+                except Exception:  # noqa: BLE001, S110 - observer failures do not affect process management
+                    pass
             try:
                 event = output_queue.get(timeout=.05)
             except queue.Empty:
@@ -105,7 +113,7 @@ def run_command(command, cwd, timeout=120, cancel=None, on_output=None):
                 pass
 
     output_thread = None
-    if on_output:
+    if on_output or on_truncated:
         output_thread = threading.Thread(target=dispatch_output, daemon=True)
         output_thread.start()
 
@@ -128,6 +136,8 @@ def run_command(command, cwd, timeout=120, cancel=None, on_output=None):
                         kept = encoded[:available].decode('utf-8', 'ignore')
                         used += len(kept.encode('utf-8'))
                         if len(encoded) > len(kept.encode('utf-8')):
+                            if not truncated:
+                                truncation_notice.set()
                             truncated = True
                         if kept:
                             chunks[name].append(kept)
@@ -136,6 +146,8 @@ def run_command(command, cwd, timeout=120, cancel=None, on_output=None):
                                 try:
                                     output_queue.put_nowait((name, kept, sequence))
                                 except queue.Full:
+                                    if not truncated:
+                                        truncation_notice.set()
                                     truncated = True
                 if not data:
                     break

@@ -28,7 +28,7 @@ class GitWorkspace:
         index = self._git("rev-parse", "--git-path", "index").decode().strip()
         self.index = (self.root / index).resolve()
 
-    def _git(self, *args, check=True, input=None, index_file=None):
+    def _git(self, *args, check=True, input=None, index_file=None, identity=None, identity_query=False):
         env = {k: v for k, v in os.environ.items() if not k.upper().startswith("GIT_")}
         env.update(
             GIT_TERMINAL_PROMPT="0",
@@ -38,6 +38,11 @@ class GitWorkspace:
             GIT_OPTIONAL_LOCKS="0",
             GIT_LITERAL_PATHSPECS="1",
         )
+        if identity_query:
+            if "GIT_CONFIG_GLOBAL" in os.environ:
+                env["GIT_CONFIG_GLOBAL"] = os.environ["GIT_CONFIG_GLOBAL"]
+            else:
+                env.pop("GIT_CONFIG_GLOBAL", None)
         if args and args[0] in {"status", "diff", "add"}:
             probe = subprocess.run(
                 ["git", "config", "--get-regexp", r"^filter\..*\.(clean|process)$"],
@@ -54,6 +59,8 @@ class GitWorkspace:
                 raise GitWorkspaceError("Unable to inspect Git filter configuration")
         if index_file is not None:
             env["GIT_INDEX_FILE"] = str(index_file)
+        if identity is not None:
+            env.update(identity)
         command = [
             "git",
             "-c",
@@ -83,11 +90,11 @@ class GitWorkspace:
                 buffer.extend(chunk[:remaining])
                 if len(chunk) > remaining:
                     overflow.set()
-                    if args[0] in {"status", "diff", "ls-files"}:
+                    if identity_query or args[0] in {"status", "diff", "ls-files"}:
                         p.kill()
 
         readers = [
-            threading.Thread(target=drain, args=(p.stdout, output, 8_000_000)),
+            threading.Thread(target=drain, args=(p.stdout, output, 4096 if identity_query else 8_000_000)),
             threading.Thread(target=drain, args=(p.stderr, errors, 8192)),
         ]
         for reader in readers:
@@ -106,7 +113,7 @@ class GitWorkspace:
                 reader.join()
             p.stdout.close()
             p.stderr.close()
-        if overflow.is_set() and args[0] in {"status", "diff", "ls-files"}:
+        if overflow.is_set() and (identity_query or args[0] in {"status", "diff", "ls-files"}):
             raise GitWorkspaceError("Git output exceeds review limit")
         if check and p.returncode:
             raise GitWorkspaceError(errors.decode("utf-8", "replace").strip())
@@ -303,7 +310,7 @@ class GitWorkspace:
                 args = ["commit-tree", tree]
                 if state["head"]:
                     args += ["-p", state["head"]]
-                oid = self._git(*args, input=message.encode("utf-8")).decode().strip()
+                oid = self._git(*args, input=message.encode("utf-8"), identity=self._identity()).decode().strip()
                 ref = state["ref"] or "HEAD"
                 if self._git("symbolic-ref", "-q", "HEAD", check=False).decode().strip() != state["ref"]:
                     raise GitWorkspaceError("Branch changed; review again")
@@ -313,3 +320,23 @@ class GitWorkspace:
                 os.close(fd)
                 lock_path.unlink(missing_ok=True)
 
+    def _identity(self):
+        values = {}
+        for field in ("name", "email"):
+            if all(os.environ.get(f"GIT_{role}_{field.upper()}") for role in ("AUTHOR", "COMMITTER")):
+                values[field] = None
+            else:
+                values[field] = (
+                    self._git("config", "--includes", "--get", f"user.{field}", check=False, identity_query=True)
+                    .decode("utf-8", "strict")
+                    .strip()
+                )
+        identity = {}
+        for role in ("AUTHOR", "COMMITTER"):
+            for field in ("NAME", "EMAIL"):
+                key = f"GIT_{role}_{field}"
+                value = os.environ.get(key) or values[field.lower()]
+                if not value or "\n" in value or "\r" in value or "\0" in value:
+                    raise GitWorkspaceError("Configure Git user.name and user.email before committing")
+                identity[key] = value
+        return identity

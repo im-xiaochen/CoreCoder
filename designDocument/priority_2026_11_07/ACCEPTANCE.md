@@ -1,6 +1,6 @@
 # F06 / F10 / F18 独立验收
 
-负责人：Sol（6.1 Sol high）。最终状态（2026-11-08）：**F06 PASS、F10 PASS、F18 PASS；受影响Python集成回归158 passed**。下方保留准备和开发历史，均以各模块最终结论为准。基线来源见STATUS.md；不将旧dirty文件归为本批新增。
+负责人：Sol（6.1 Sol high）。最终状态（2026-11-08）：**F06 PASS、F10 PASS、F18 PASS；受影响Python集成回归158 passed；PR13 review修复独立增量PASS**。下方保留准备和开发历史，均以各模块最终结论为准。基线来源见STATUS.md；不将旧dirty文件归为本批新增。
 
 执行口径：不调用付费模型，不加载用户MCP/hooks，不操作用户仓库的index/提交。真实Git和命令探针均使用独立临时目录。按新模块及风险受影响回归执行一次；修复后只必要定向复验。原上批完整功能证据可复用，不重复旧590套件。开发者自测与代码review不代替独立行为证据。
 
@@ -130,3 +130,19 @@ Terra确认F10无在途或计划语义修改，按`f10-hashes.json`冻结；Astr
 实际结果：**158 passed in 39.13s**，exit0；源码与README/pyproject跑前/后hash相同。显式选择新Git/checks测试、受影响REPL/slash/session/usage/command/modes/Web/run、workspace/cost/CLI-result/session-validation契约及两项文档行数检查。没有重复旧590整套，也没有重跑F06/F10已过独立套件。日志与JUnit为`acceptance/validation/phase2-final-regression/pytest.log`及`result.xml`。执行session 58059已完成，没有后台验收任务。
 
 Terra另行执行CI范围ruff、compileall、前端81项测试与build均通过，其日志由实现负责人记录，本独立报告不将其计入Sol实测数量，也不再重复。F06/F10原门禁沿用上述证据；F10 CLI仍限配置/授权执行/日志，历史恢复仅Web/核心。当前F06/F10/F18没有未关闭独立功能失败。平台实测限本机Windows/Python3.12，UI为React DOM交互而非真实浏览器视觉；没有付费模型效果评测。
+
+### PR13 Codex review修复增量（2026-11-08）
+
+当前增量门禁：**PASS**。两项验收发现均已修复并定向通过，过程与失败证据如下保留。此前F06/F10/F18冻结版本结果保留；本轮只验review修复，不重跑158或旧整套。独立计划`acceptance/PR13_INCREMENTAL_PLAN.md`。
+
+- Git身份：`test_pr13_git_identity_independent.py`，**4 passed in 14.21s**。临时仓库仅fake HOME global身份时提交成功，commit对象作者/提交者正确；每字段env > local > global；危险global hook/filter/gpg/fsmonitor/externaldiff哨兵全零触发；local filter仍拒绝。身份源码hash`077ff553ce98faa981dac51263d33dc35a64425d7ea6ef2f5f20ce4452620f0c`。命令venv pytest显式该文件，`--basetemp .../validation/tmp-pr13-identity --junitxml .../validation/pr13-identity.xml`，日志`validation/pr13-identity.log/xml`。
+- 核心日志首次：`test_pr13_checks_incremental_independent.py` **1 passed、1 failed**，9.48秒。真实命令开头stdout/stderr后等待release，未结束时原档running已含双流；复制该live前缀后在新进程recover两次，interrupted且日志原样保留、execution-count仍1。这是模拟crash前缀，不宣称强杀。大输出运行中truncated=false缺陷已直报，Terra补runner独立sticky通知。首次日志`validation/pr13-logs.log/xml`保留（含大输出，不建议整份打印）。
+- 截断修复定向：只选`large_log or exact_runner_limit`，精确2MiB真实输出完整、callback无缺失、无截断通知通过；大输出运行中truncated=true正确。该大输出用例终态实际exit7/exited，却因Windows原JSON读取与replace竞争WinError5导致sticky persistence_error与unknown，已交Terra/Astra，待复验。证据`validation/pr13-logs-fixed.log/xml`；独立失败摘要已缩短，未降低断言要求。
+- HTTP/SSE：`test_pr13_http_independent.py` **1 passed in 5.89s**。实际loopback HTTP启动长检查，release前SSE check_output绑定run/session/result ID，权威GET显示running双流；游标续传无重序，最终check_result真实exit7，旧run回调不污染新run。命令venv pytest该文件，basetemp=`validation/tmp-pr13-http`，日志/JUnit=`validation/pr13-http.log/xml`。
+- 实际App：`pr13-ui.test.tsx` **4 passed**，测试1.25秒/总3.71秒。重复progress获取权威GET结果而非信任event正文，原样文本不执行HTML；check_result/done/terminal reset清live且作废待返回旧GET。刻意挂起终态session GET，证明是终态generation本身阻止旧日志复活。命令`node frontend/node_modules/vitest/vitest.mjs run --config designDocument/priority_2026_11_07/acceptance/vitest.pr13.config.mjs`，日志`validation/pr13-ui-fixed.log`。首次UI失败仅独立夹具缺Node localStorage替身，修正自身夹具后通过，原日志`pr13-ui.log`保留。
+
+最终修复复验：Terra对Windows sharing violation（winerror 5/32/33）采用同一临时文件1秒有界退避，其余错误仍失败。仅运行`-k large_log`，**1 passed、2 deselected in 2.72s**；运行中已见截断且日志不超2MiB，读写竞争不再让真实exit7变unknown，终态failed/exited/7正确。日志/JUnit=`validation/pr13-logs-final.log/xml`，basetemp=`validation/tmp-pr13-logs-final`。2 deselected为未选择已通过项目，不是环境skip；未重复精确2MiB或quiet/recovery场景。
+
+最终8个涉及生产文件hash见`validation/pr13-final-hashes.json`；project_checks.py为`0136031b9314`开头。身份4项、核心日志3个不同场景（quiet/recovery、超限、精确上限）、HTTP1、实际App4均有上述实际通过证据。发现的运行中截断标志缺失与Windows共享冲突均关闭，当前无未关闭独立功能缺陷，允许root继续发布hash核验及GitHub CI/review流程。
+
+所有真实Git/命令均在隔离fixture，不加载真实用户配置/扩展/密钥。生产与开发者测试未由Sol修改。本轮仍为Windows/Python3.12和实际React DOM，非浏览器视觉验收。不重复158/旧整套；最终生产hash冻结后，后续发布字节由root核验。

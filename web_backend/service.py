@@ -329,7 +329,7 @@ class WebSession:
                 return
         if guard is not None and (not guard.is_set() or self.run_id != run_id):
             return
-        if event not in {"token", "reasoning", "snapshot", "done"}:
+        if event not in {"token", "reasoning", "snapshot", "done", "check_output"}:
             self.timeline.append(entry)
         if self.events is not None:
             self.events.put(entry)
@@ -630,13 +630,20 @@ class Service:
             raise
         def run_checks():
             status = 'completed'
+            progress_guard = threading.Event()
+            progress_guard.set()
             try:
                 session.emit('started', {'session_id': sid})
                 for check in selection['checks']:
                     if session.cancel.is_set():
                         status = 'cancelled'
                         break
-                    result = self.project_checks.run(check['id'], token, authorized=True, files=files, run_id=rid, session_id=sid, cancel=session.cancel)
+                    check_guard = threading.Event()
+                    check_guard.set()
+                    try:
+                        result = self.project_checks.run(check['id'], token, authorized=True, files=files, run_id=rid, session_id=sid, cancel=session.cancel, on_progress=lambda event, guard=check_guard: session.emit('check_output', event, guard=guard, run_id=rid))
+                    finally:
+                        check_guard.clear()
                     session.emit('check_result', {k: v for k, v in result.items() if k not in ('stdout', 'stderr')})
                     if result['status'] == 'cancelled': status = 'cancelled'; break
                     if result['status'] != 'passed': status = 'failed'
@@ -644,6 +651,7 @@ class Service:
                 status = 'failed'
                 session.emit('error', {'message': str(exc)[:500]})
             finally:
+                progress_guard.clear()
                 session.busy = False
                 try:
                     try: session.persist()
