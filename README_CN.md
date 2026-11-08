@@ -308,3 +308,15 @@ REPL 里 `/plan` 开关计划模式。开着的时候，提示符变成 `(plan)`
 > CoreCoder 原名 NanoCoder，为避免和 [Nano-Collective/nanocoder](https://github.com/Nano-Collective/nanocoder) 混淆而改名，旧链接会自动跳到这里。
 
 项目规则：编程与计划模式按工作区根目录至当前目录的顺序加载 `AGENTS.md`，并限制文件大小；聊天模式不发现或读取项目规则。CLI 使用 `/rules`，网页在工作区面板查看来源和跳过原因。
+
+## Git 审阅、项目检查与离线评测
+
+在 Git 工作区面板按需查看 HEAD 到索引、索引到工作树的差异，选择路径并明确确认暂存或提交。审阅后内容变化会要求重新审阅；任务期间的变化也可能来自外部编辑。
+
+项目检查由 `.corecoder/checks.json` 显式配置并由用户授权执行。网页检查面板展示命令并保留结果历史；CLI 使用 `/checks` 查看、`/check <id>` 确认运行。默认不自动修复，历史记录在网页中查看。
+
+```json
+{"version": 1, "checks": [{"id": "test", "name": "测试", "command": "python -m pytest", "cwd": ".", "timeout": 120, "files": ["*.py"]}]}
+```
+
+在源码检出目录运行 `python -m corecoder.evaluation --output ./evaluation-output` 执行隔离的脚本化回归（wheel 不包含网页后端），附加 `--task agent` 可选择单项。报告和临时仓库证据保留在输出目录；脚本模型和合成费用用于验证系统行为，并非模型能力或真实账单。

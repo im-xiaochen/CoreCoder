@@ -13,6 +13,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from corecoder.project_checks import CheckError
+
 from .service import RequestError, Service
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -124,6 +126,19 @@ def make_handler(service: Service, frontend: Path):
                     return self.reply(service.get(parse_qs(url.query).get("id", [""])[0]).snapshot())
                 if url.path == "/api/changes":
                     return self.reply(service.get(parse_qs(url.query).get("id", [""])[0]).changes())
+                if url.path in ("/api/git/status", "/api/git/diff"):
+                    query = parse_qs(url.query)
+                    return self.reply(service.git_action(query.get('id', [''])[0], url.path.rsplit('/', 1)[-1], {'path': query.get('path', [''])[0], 'staged': query.get('staged', [''])[0] == 'true'}))
+                if url.path == '/api/checks/config':
+                    session = service.get(parse_qs(url.query).get('id', [''])[0])
+                    if session.mode == 'chat': raise RequestError('聊天模式不读取项目检查。', 403)
+                    return self.reply(service.project_checks.inspect())
+                if url.path == '/api/checks/result':
+                    return self.reply(service.project_checks.get(parse_qs(url.query).get('result_id', [''])[0]))
+                if url.path == '/api/checks/history':
+                    sid = parse_qs(url.query).get('id', [''])[0]
+                    service.get(sid)
+                    return self.reply(service.project_checks.history(sid))
                 if url.path.startswith("/api/"):
                     raise RequestError("接口不存在。", 404)
                 requested = (frontend / unquote(url.path).lstrip("/")).resolve()
@@ -145,6 +160,8 @@ def make_handler(service: Service, frontend: Path):
                 self.wfile.write(payload)
             except RequestError as exc:
                 self.reply({"error": str(exc)}, exc.status)
+            except CheckError as exc:
+                self.reply({'error': str(exc)}, 400)
             except (OSError, ValueError, TypeError, AttributeError):
                 self.reply({"error": "无法读取本地数据。"}, 500)
 
@@ -156,6 +173,10 @@ def make_handler(service: Service, frontend: Path):
                     return self.reply(service.create(), 201)
                 if path == "/api/action":
                     return self.reply(service.action(data.get("id", ""), data))
+                if path in ("/api/git/stage", "/api/git/commit"):
+                    return self.reply(service.git_action(data.get('id', ''), path.rsplit('/', 1)[-1], data))
+                if path == '/api/checks/start':
+                    return self.reply(service.checks_start(data.get('id', ''), data), 201)
                 if path == "/api/runs":
                     sid = data.get("id", "")
                     prompt = data.get("prompt", "")
@@ -201,6 +222,8 @@ def make_handler(service: Service, frontend: Path):
                         session.events = None
             except RequestError as exc:
                 self.reply({"error": str(exc)}, exc.status)
+            except CheckError as exc:
+                self.reply({'error': str(exc)}, 400)
             except (OSError, ValueError, TypeError, AttributeError):
                 self.reply({"error": "操作失败，请查看服务终端或重试。"}, 500)
 

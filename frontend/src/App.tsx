@@ -6,6 +6,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { GitPanel } from "./GitPanel";
+import { ChecksPanel } from "./ChecksPanel";
 import {
   ArrowUp,
   ArrowUpRight,
@@ -346,7 +348,11 @@ export default function App() {
   const [sidebar, setSidebar] = useState(() => window.innerWidth >= 700);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const [inspector, setInspector] = useState(false);
-  const [tab, setTab] = useState<"overview" | "changes">("overview");
+  const [tab, setTab] = useState<"overview" | "changes" | "git" | "checks">("overview");
+  const [checkEvents, setCheckEvents] = useState<ToolEvent[]>([]);
+  const [checkOutput, setCheckOutput] = useState<{ id: string; text: string } | null>(null);
+  const checkOutputGeneration = useRef(0);
+  useEffect(() => { setCheckEvents([]); setCheckOutput(null); }, [session?.id]);
   const [dialog, setDialog] = useState<
     "settings" | "history" | "help" | "reset" | null
   >(null);
@@ -622,6 +628,8 @@ export default function App() {
     void followRun(rid, (event) => {
       if (!isCurrentRun()) return;
       if (event.type === "reset") {
+        checkOutputGeneration.current++;
+        setCheckOutput(null);
         const terminal = ["completed", "cancelled", "failed", "interrupted"].includes(event.status || "");
         if (terminal) {
           setStreamText(""); setReasoning(""); setLiveTools([]); setPermission(null);
@@ -639,6 +647,14 @@ export default function App() {
       if (event.type === "token") setStreamText((text) => text + (event.text || ""));
       if (event.type === "reasoning") setReasoning((text) => text + (event.text || ""));
       if (["tool_start", "tool_output", "tool_result"].includes(event.type)) setLiveTools((events) => [...events, event]);
+      if (event.type === "check_result") { setCheckEvents((events) => [...events, event]); checkOutputGeneration.current++; setCheckOutput(null); }
+      if (event.type === "check_output" && event.id) {
+        const resultId = event.id;
+        const generation = ++checkOutputGeneration.current;
+        void api<{ stdout: string; stderr: string }>(`checks/result?result_id=${encodeURIComponent(resultId)}`).then(result => {
+          if (isCurrentRun() && generation === checkOutputGeneration.current) setCheckOutput({ id: resultId, text: (result.stdout + result.stderr).slice(-200000) });
+        }).catch(() => {});
+      }
       if (event.type === "run_result" && event.runStatus) setRunResult({
         status: event.runStatus, finishReason: event.finish_reason, rounds: event.rounds,
         toolErrors: event.tool_errors || [], text: event.text, at: event.at,
@@ -654,6 +670,8 @@ export default function App() {
         applySession(event.session); setStreamText(""); setLiveTools([]); setPermission(null);
       }
       if (event.type === "done") {
+        checkOutputGeneration.current++;
+        setCheckOutput(null);
         void api<Session>(`session?id=${encodeURIComponent(sid)}`).then((value) => {
           if (isCurrentRun()) applySession(value);
           void refreshList();
@@ -1629,6 +1647,8 @@ export default function App() {
                 <span>{session.changes.length}</span>
               ) : null}
             </button>
+            <button className={tab === "git" ? "selected" : ""} onClick={() => setTab("git")}>Git</button>
+            <button className={tab === "checks" ? "selected" : ""} onClick={() => setTab("checks")}>检查</button>
           </div>
           <div className="inspector-content">
             {tab === "overview" ? (
@@ -1773,6 +1793,10 @@ export default function App() {
                   {boot?.hooks.post || 0} 个后置
                 </div>
               </>
+            ) : tab === "checks" ? (
+              session ? <ChecksPanel key={session.id} id={session.id} writable={sessionMode(session) === "code" && !busy && !pendingAction && !sending} liveOutput={checkOutput} events={[...session.timeline, ...checkEvents].filter((event, index, all) => event.type !== 'check_result' || all.findIndex(item => item.type === 'check_result' && item.id === event.id) === index)} onStarted={async () => { const sid = session.id; const value = await api<Session>(`session?id=${encodeURIComponent(sid)}`); if (sessionRef.current?.id === sid) applySession(value); }} /> : null
+            ) : tab === "git" ? (
+              session ? <GitPanel key={session.id} id={session.id} writable={sessionMode(session) === "code" && !busy && !pendingAction && !sending} /> : null
             ) : (
               <>
                 <div className="changes-summary">
@@ -2138,3 +2162,4 @@ export default function App() {
     </div>
   );
 }
+
