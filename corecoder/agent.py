@@ -218,7 +218,13 @@ class Agent:
                 outcome.command_status = command_status
             self._tool_result_cache[tc.id] = outcome
             return outcome
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
+            from .budget import BudgetExceeded
+            if isinstance(exc, BudgetExceeded):
+                self._tool_result_cache[tc.id] = ToolOutcome(
+                    tc.id, name, "failed", f"Error: budget exceeded; tool started and may have changed the workspace: {exc}", "execute"
+                )
+                raise
             return ToolOutcome(tc.id, name, "failed", f"Error: {exc}", "execute")
 
     def _run_turn(self, on_token=None, on_tool=None, on_reasoning=None):
@@ -239,12 +245,25 @@ class Agent:
             messages=[{"role": "system", "content": system}, *self.messages], tools=self._tool_schemas(), on_token=on_token, on_reasoning=on_reasoning
         )
 
-    def chat_result(self, user_input, on_token=None, on_tool=None, on_reasoning=None):
+    def chat_result(self, user_input, on_token=None, on_tool=None, on_reasoning=None, *, budget_limits=None):
+        from .budget import BudgetExceeded, RunBudget
+        from .llm import _BUDGET_SCOPE, LLM, budget_scope
+        current = _BUDGET_SCOPE.get()
+        if current is not None and budget_limits is not None:
+            raise ValueError("Cannot replace an active run budget")
+        budget = current if current is not None else (RunBudget(budget_limits) if budget_limits is not None else None)
         cm = self.llm.run_scope() if hasattr(self.llm, "run_scope") else nullcontext(None)
-        with cm as scope:
-            result = self._chat_result_unscoped(user_input, on_token, on_tool, on_reasoning)
+        with budget_scope(budget), cm as scope:
+            if budget is not None and type(self.llm) is not LLM:
+                exc = BudgetExceeded("Model client does not support run budgets")
+                result = RunResult("failed", finish_reason="budget_exceeded", error=exc)
+            else:
+                result = self._chat_result_unscoped(user_input, on_token, on_tool, on_reasoning)
             if scope is not None:
                 result.usage = scope.as_dict()
+            if budget is not None:
+                result.budget = budget.snapshot()
+            self.last_result = result
             return result
 
     def _chat_result_unscoped(self, user_input, on_token=None, on_tool=None, on_reasoning=None):
@@ -322,6 +341,7 @@ class Agent:
                 rounds += 1
             result = RunResult("cancelled", "".join(text_parts), rounds, errors, self._usage(start_p, start_c), "cancelled")
         except Exception as exc:  # noqa: BLE001
+            from .budget import BudgetExceeded
             if calls is not None and not locals().get("envelope_invalid", False):
                 self._answer_pending_tool_calls(calls, errors, answered=answered_ids if "answered_ids" in locals() else set())
             if self._turn_started:
@@ -332,7 +352,7 @@ class Agent:
                 rounds,
                 errors + [{"call_id": None, "name": None, "status": "failed", "stage": "loop", "message": str(exc)}],
                 self._usage(start_p, start_c),
-                "failed",
+                "budget_exceeded" if isinstance(exc, BudgetExceeded) else "failed",
                 exc,
             )
         self.last_result = result
@@ -389,11 +409,14 @@ class Agent:
         try:
             result = tool.execute(**tc.arguments)
             return result if isinstance(result, str) else str(result)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
+            from .budget import BudgetExceeded
+            if isinstance(exc, BudgetExceeded):
+                raise
             return f"Error executing {tc.name}: {exc}"
 
     def _exec_tools_parallel(self, tool_calls, on_tool=None, return_outcomes=False):
-        readonly = all(getattr(tc, "name", "") in {"read_file", "glob", "grep"} for tc in tool_calls)
+        readonly = all(getattr(tc, "name", "") in {"read_file", "glob", "grep", "repo_map"} for tc in tool_calls)
         if readonly and len(tool_calls) > 1:
             with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(tool_calls))) as pool:
                 outcomes = list(pool.map(lambda tc: self._run_tool_call(tc, on_tool), tool_calls))

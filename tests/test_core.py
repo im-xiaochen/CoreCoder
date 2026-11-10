@@ -103,7 +103,12 @@ def test_public_api_exports():
     assert Agent is not None
     assert LLM is not None
     assert Config is not None
-    assert len(ALL_TOOLS) == 8
+    assert len(ALL_TOOLS) == 9
+    assert sum(tool.name == "repo_map" for tool in ALL_TOOLS) == 1
+    from corecoder.permissions import Permission
+    assert "repo_map" in Permission.READ_ONLY
+    assert Permission().check("repo_map", {}) is None
+    assert Permission().check("write_file", {}) is not None
 
 
 def test_config_from_env(monkeypatch):

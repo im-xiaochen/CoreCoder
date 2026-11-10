@@ -288,3 +288,135 @@ describe("run recovery", () => {
     expect(screen.queryByText("old command")).toBeNull();
   });
 });
+
+describe("run budget controls", () => {
+  it("omits empty budget and sends zero explicitly", async () => {
+    const user = userEvent.setup();
+    mocks.chat.mockResolvedValue({ id: "r", session_id: "a", status: "running", last_seq: 0 });
+    render(<App />);
+    const composer = await screen.findByLabelText("输入任务");
+    await user.type(composer, "hello");
+    await user.click(screen.getByRole("button", { name: "发送任务" }));
+    await waitFor(() => expect(mocks.api.mock.calls.find(([p]) => p === "runs")?.[1]).toEqual({ id: "a", prompt: "hello" }));
+  });
+
+  it("sends a zero request limit", async () => {
+    const user = userEvent.setup();
+    mocks.chat.mockResolvedValue({ id: "r", session_id: "a", status: "running", last_seq: 0 });
+    render(<App />);
+    const composer = await screen.findByLabelText("输入任务");
+    await user.click(screen.getByText("本次运行预算（可选）"));
+    await user.type(screen.getByLabelText("请求上限"), "0");
+    await user.type(composer, "hello");
+    await user.click(screen.getByRole("button", { name: "发送任务" }));
+    await waitFor(() => expect(mocks.api.mock.calls.find(([p]) => p === "runs")?.[1]).toMatchObject({ budget: { requests: 0 } }));
+  });
+
+  it("rejects an invalid cost without sending", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const composer = await screen.findByLabelText("输入任务");
+    await user.click(screen.getByText("本次运行预算（可选）"));
+    await user.type(screen.getByLabelText("费用上限"), "NaN");
+    await user.type(composer, "hello");
+    await user.click(screen.getByRole("button", { name: "发送任务" }));
+    expect(mocks.api.mock.calls.some(([p]) => p === "runs")).toBe(false);
+    expect(await screen.findByText(/预算必须是非负整数/)).toBeTruthy();
+  });
+});
+
+describe("budget report", () => {
+  it("shows unknown cost and distinguishes old runs", async () => {
+    const previous = mocks.api.getMockImplementation()!;
+    sessions.a.run_id = "budget-run";
+    mocks.api.mockImplementation((path: string, body?: { id: string; prompt: string }) => {
+      if (path.startsWith("run?id=")) return Promise.resolve({ budget: {
+        groups: { actual: { requests: 1, tokens: 5, known_cost: "0.003", unknown_cost_requests: 0 },
+          in_flight: { requests: 0, tokens: 0, known_cost: "0", unknown_cost_requests: 0 },
+          unconfirmed: { requests: 1, tokens: 8, known_cost: "0", unknown_cost_requests: 1 } },
+        limits: { requests: 5, total_tokens: 100, cost: "1" },
+        report: { requests_remaining: 3, tokens_remaining: 87, cost_remaining: null, cost_overage_known: "0", tokens_overage: 0, unknown_cost_requests: 1 },
+      } });
+      return previous(path, body);
+    });
+    render(<App />);
+    expect(await screen.findByText(/剩余费用：未知/)).toBeTruthy();
+    expect(screen.getByText(/未知费用笔数：1/)).toBeTruthy();
+    delete sessions.a.run_id;
+  });
+
+  it("shows unavailable for an old run", async () => {
+    render(<App />);
+    expect(await screen.findByText("预算数据不可用")).toBeTruthy();
+  });
+});
+
+it("ignores a delayed budget report after switching sessions", async () => {
+  let resolveOld!: (value: unknown) => void;
+  const previous = mocks.api.getMockImplementation()!;
+  sessions.a.run_id = "old";
+  mocks.api.mockImplementation((path: string, body?: { id: string; prompt: string }) => {
+    if (path === "run?id=old") return new Promise((resolve) => { resolveOld = resolve; });
+    return previous(path, body);
+  });
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByLabelText("输入任务");
+  await waitFor(() => expect(resolveOld).toBeDefined());
+  await user.click(screen.getByRole("button", { name: /对话乙/ }));
+  await act(async () => resolveOld({ budget: { groups: { actual: { requests: 99, tokens: 0, known_cost: "0", unknown_cost_requests: 0 }, in_flight: { requests: 0, tokens: 0, known_cost: "0", unknown_cost_requests: 0 }, unconfirmed: { requests: 0, tokens: 0, known_cost: "0", unknown_cost_requests: 0 } }, limits: { requests: null, total_tokens: null, cost: null }, report: { requests_remaining: null, tokens_remaining: null, cost_remaining: null, cost_overage_known: null, tokens_overage: 0, unknown_cost_requests: 0 } } }));
+  expect(screen.getByText("预算数据不可用")).toBeTruthy();
+  expect(screen.queryByText("99")).toBeNull();
+  delete sessions.a.run_id;
+});
+
+it("freezes the submitted budget while a run is pending", async () => {
+  let finish!: (value: unknown) => void;
+  mocks.chat.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  const user = userEvent.setup();
+  render(<App />);
+  const composer = await screen.findByLabelText("输入任务");
+  await user.click(screen.getByText("本次运行预算（可选）"));
+  const requests = screen.getByLabelText("请求上限");
+  await user.type(requests, "2");
+  await user.type(composer, "hello");
+  await user.click(screen.getByRole("button", { name: "发送任务" }));
+  await user.clear(requests); await user.type(requests, "5");
+  expect(mocks.api.mock.calls.find(([p]) => p === "runs")?.[1]).toMatchObject({ budget: { requests: 2 } });
+  await act(async () => finish({ id: "r", session_id: "a", status: "running", last_seq: 0 }));
+  expect((requests as HTMLInputElement).value).toBe("5");
+});
+
+it("waits for a slow poll and stops after terminal response", async () => {
+  let resolve!: (value: unknown) => void;
+  const previous = mocks.api.getMockImplementation()!;
+  sessions.a.run_id = "poll";
+  const group = { requests: 1, tokens: 1, known_cost: "0", unknown_cost_requests: 0 };
+  mocks.api.mockImplementation((path: string, body?: { id: string; prompt: string }) => {
+    if (path === "run?id=poll") return new Promise((done) => { resolve = done; });
+    return previous(path, body);
+  });
+  render(<App />);
+  await waitFor(() => expect(resolve).toBeDefined());
+  await new Promise((done) => setTimeout(done, 1700));
+  expect(mocks.api.mock.calls.filter(([path]) => path === "run?id=poll")).toHaveLength(1);
+  await act(async () => resolve({ status: "completed", budget: { groups: { actual: group, in_flight: group, unconfirmed: group }, limits: { requests: 10, total_tokens: null, cost: null }, report: { requests_remaining: 4, tokens_remaining: null, cost_remaining: null, cost_overage_known: null, tokens_overage: 0, unknown_cost_requests: 0 } } }));
+  expect(await screen.findByText(/剩余请求：4/)).toBeTruthy();
+  await new Promise((done) => setTimeout(done, 1700));
+  expect(mocks.api.mock.calls.filter(([path]) => path === "run?id=poll")).toHaveLength(1);
+  delete sessions.a.run_id;
+});
+
+it("does not switch plan mode for invalid approval budget", async () => {
+  sessions.a.plan_mode = true;
+  const user = userEvent.setup();
+  render(<App />);
+  const composer = await screen.findByLabelText("输入任务");
+  await user.click(screen.getByText("本次运行预算（可选）"));
+  await user.type(screen.getByLabelText("费用上限"), "NaN");
+  await user.type(composer, "/approve");
+  await user.click(screen.getByRole("button", { name: "发送任务" }));
+  expect(mocks.api.mock.calls.some(([path]) => path === "action" || path === "runs")).toBe(false);
+  expect((composer as HTMLTextAreaElement).value).toBe("/approve");
+  sessions.a.plan_mode = false;
+});

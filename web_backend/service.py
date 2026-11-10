@@ -30,6 +30,7 @@ from corecoder.tools.edit import EditFileTool
 from corecoder.tools.glob_tool import GlobTool
 from corecoder.tools.grep import GrepTool
 from corecoder.tools.read import ReadFileTool
+from corecoder.tools.repo_map import RepoMapTool
 from corecoder.tools.todo import TodoWriteTool
 from corecoder.tools.write import WriteFileTool
 from corecoder.usage import deserialize_usage, serialize_usage
@@ -267,6 +268,7 @@ class WebSession:
                 EditFileTool(state=self.state),
                 GlobTool(state=self.state),
                 WorkspaceGrepTool(service.workspace, state=self.state),
+                RepoMapTool(state=self.state),
             ]
         ]
         tools += [BashTool(state=self.state), TodoWriteTool(state=self.state), BrowserAgentTool(), *service.mcp_tools]
@@ -494,6 +496,9 @@ class Service:
         # A prior server process cannot safely resume a model request or tool.
         for rid, run in list(self.runs.runs.items()):
             if run['status'] not in TERMINAL:
+                if run.get("budget") is not None:
+                    from corecoder.budget import RunBudget
+                    self.runs.budget(rid, RunBudget.restore(run["budget"]).snapshot())
                 session = self.sessions.get(run['session_id'])
                 if session:
                     self.repair_pending(session.agent)
@@ -676,7 +681,28 @@ class Service:
             raise
         return self.runs.view(rid)
 
-    def start(self, sid: str, prompt: str, *, legacy_events=True):
+    def skills(self, sid):
+        if not self.execution.acquire(blocking=False):
+            raise RequestError("另一个任务仍在运行。", 409)
+        try:
+            session = self.get(sid)
+            with self.lock:
+                if self.sessions.get(sid) is not session or session.archived:
+                    raise RequestError("对话不可用。", 409)
+                if session.mode == "chat":
+                    raise RequestError("聊天模式不读取项目技能。", 403)
+            from corecoder.skill_commands import RESERVED
+            from corecoder.skills import list_skills
+            try:
+                entries = list_skills(self.workspace)
+                return {"skills": [{"name": e.name, "source": e.source, "conflict": e.conflict or e.name in RESERVED,
+                                    "command": f"/{e.name}@{e.source}", "valid": e.valid} for e in entries]}
+            except (OSError, ValueError) as exc:
+                raise RequestError(f"无法读取技能列表: {exc}") from exc
+        finally:
+            self.execution.release()
+
+    def start(self, sid: str, prompt: str, *, legacy_events=True, budget=None):
         session = self.get(sid)
         if not prompt.strip() or len(prompt) > 100_000:
             raise RequestError("请输入 1–100000 个字符的任务。")
@@ -692,8 +718,39 @@ class Service:
             self.execution.release()
             raise RequestError("请先恢复已归档的对话。", 409)
         try:
+            from corecoder.budget import BudgetLimits
+            if budget is not None:
+                if not isinstance(budget, dict) or set(budget) - {"requests", "total_tokens", "cost", "unknown_policy"}:
+                    raise RequestError("Invalid budget fields")
+                try:
+                    budget_limits = BudgetLimits(**budget)
+                    if all(getattr(budget_limits, key) is None for key in ("requests", "total_tokens", "cost")):
+                        budget_limits = None
+                except (ValueError, TypeError) as exc:
+                    raise RequestError(f"Invalid budget: {exc}") from exc
+            else:
+                budget_limits = None
+            if prompt.startswith("/") and prompt != "/approve":
+                from corecoder.skill_commands import skill_command
+                try:
+                    kind, resolved = skill_command(self.workspace, prompt, session.mode == "chat")
+                except (LookupError, ValueError, OSError, UnicodeError) as exc:
+                    raise RequestError(f"Skill error: {exc}") from exc
+                if kind == "list":
+                    raise RequestError("Use the skills listing endpoint for /skills")
+                prompt = resolved
+        except Exception:
+            self.execution.release()
+            raise
+        old_run_id = session.run_id
+        run_id = None
+        try:
             session.run_id = self.runs.create(sid)
             run_id = session.run_id
+            from corecoder.budget import RunBudget
+            run_budget = RunBudget(budget_limits, on_change=lambda snapshot: self.runs.budget(run_id, snapshot)) if budget_limits is not None else None
+            if run_budget is not None:
+                self.runs.budget(run_id, run_budget.snapshot())
             session.git_baseline = None
             session.git_baseline_run_id = run_id
             if session.mode != 'chat':
@@ -708,6 +765,12 @@ class Service:
             session.persist()
         except Exception:
             session.busy = False
+            session.run_id = old_run_id
+            if run_id is not None:
+                try:
+                    self.runs.status(run_id, "failed")
+                except Exception:  # noqa: BLE001, S110 - original error remains primary
+                    pass
             self.execution.release()
             raise
         if session.title == "新对话":
@@ -718,11 +781,13 @@ class Service:
             try:
                 session.agent.state.cwd = Path(session.cwd).resolve()
                 session.emit("started", {"session_id": sid})
-                result = session.agent.chat_result(
-                    prompt,
-                    on_token=lambda token: (session.check_cancelled(), session.emit("token", {"text": token})),
-                    on_reasoning=lambda token: (session.check_cancelled(), session.emit("reasoning", {"text": token})),
-                )
+                from corecoder.llm import budget_scope
+                with budget_scope(run_budget):
+                    result = session.agent.chat_result(
+                        prompt,
+                        on_token=lambda token: (session.check_cancelled(), session.emit("token", {"text": token})),
+                        on_reasoning=lambda token: (session.check_cancelled(), session.emit("reasoning", {"text": token})),
+                    )
                 final_status = result.status if result.status in TERMINAL else 'failed'
                 result_payload = {
                     "status": result.status,
@@ -730,6 +795,7 @@ class Service:
                     "rounds": result.rounds,
                     "tool_errors": result.tool_errors,
                     "usage": result.usage,
+                    "budget": result.budget,
                     "text": result.text,
                 }
                 session.emit("run_result", result_payload)
@@ -763,14 +829,18 @@ class Service:
                 session.updated_at = time.time()
                 try:
                     session.persist()
+                    if run_budget is not None:
+                        self.runs.budget(run_id, run_budget.snapshot())
                     self.runs.status(session.run_id, final_status)
                     session.emit("snapshot", {"session": session.snapshot()})
                     session.emit("done", {"status": final_status})
                 except Exception:  # noqa: BLE001 - always release the execution lock
                     try:
-                        self.runs.status(session.run_id, 'failed')
-                        session.emit("error", {"message": "任务状态保存失败。"})
-                        session.emit("done", {"status": "failed"})
+                        if run_budget is None:
+                            self.runs.status(session.run_id, 'failed')
+                        session.emit("error", {"message": "任务状态保存失败；重启后将标记为中断。"})
+                        if run_budget is None:
+                            session.emit("done", {"status": "failed"})
                     except Exception:  # noqa: BLE001, S110 - storage may be unavailable
                         pass
                     if events is not None:
@@ -779,7 +849,18 @@ class Service:
                     session.events = None
                     self.execution.release()
 
-        threading.Thread(target=run, daemon=True).start()
+        try:
+            threading.Thread(target=run, daemon=True).start()
+        except Exception:
+            session.busy = False
+            session.run_id = old_run_id
+            session.events = None
+            try:
+                self.runs.status(run_id, "failed")
+                session.persist()
+            finally:
+                self.execution.release()
+            raise
         return events if legacy_events else run_id
 
     @staticmethod

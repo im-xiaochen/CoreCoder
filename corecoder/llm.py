@@ -13,6 +13,7 @@ import contextvars
 import json
 import math
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -22,6 +23,19 @@ from uuid import uuid4
 from openai import APIConnectionError, APIError, APITimeoutError, BadRequestError, OpenAI, RateLimitError
 
 from .usage import CostSummary, RequestContext, UsageEntry, UsageLedger, active_usage_scope, usage_scope
+
+_BUDGET_SCOPE = contextvars.ContextVar("corecoder_budget_scope", default=None)
+_ATTEMPT_SCOPE = contextvars.ContextVar("corecoder_budget_attempt", default=None)
+
+
+@contextmanager
+def budget_scope(budget):
+    token = _BUDGET_SCOPE.set(budget)
+    try:
+        yield budget
+    finally:
+        _BUDGET_SCOPE.reset(token)
+
 
 _REQUEST_SCOPE: contextvars.ContextVar[RequestContext | None] = contextvars.ContextVar("corecoder_request_scope", default=None)
 
@@ -268,6 +282,9 @@ class LLM:
             estimated_cost=cost,
         )
         self._ledger.append(entry)
+        budget = _BUDGET_SCOPE.get()
+        if budget is not None and attempt_id == _ATTEMPT_SCOPE.get():
+            budget.settle(attempt_id, entry if known else None)
         scope = active_usage_scope()
         if scope is not None:
             scope.record(entry)
@@ -305,6 +322,7 @@ class LLM:
         """
         context = self._request_context()
         scope_token = _REQUEST_SCOPE.set(context)
+        attempt_token = _ATTEMPT_SCOPE.set(None)
         params: dict = {
             "model": context.model,
             "messages": messages,
@@ -338,7 +356,8 @@ class LLM:
                     raise
                 params.pop("stream_options")
             try:
-                return self._drain(stream, on_token, on_reasoning, _context=context, _attempt_id=attempt_id)
+                return self._drain(stream, on_token, on_reasoning, _context=context,
+                                   _attempt_id=_ATTEMPT_SCOPE.get() if _BUDGET_SCOPE.get() else attempt_id)
             except (RateLimitError, APITimeoutError, APIConnectionError) as e:
                 last_err = e
             except APIError as e:
@@ -355,6 +374,7 @@ class LLM:
                 time.sleep(2**attempt)
           raise last_err
         finally:
+          _ATTEMPT_SCOPE.reset(attempt_token)
           _REQUEST_SCOPE.reset(scope_token)
 
     def _drain(self, stream, on_token, on_reasoning, _context=None, _attempt_id=None) -> LLMResponse:
@@ -444,12 +464,33 @@ class LLM:
     def _call_with_retry(self, params: dict, max_retries: int = 3):
         """Retry on transient errors with exponential backoff."""
         for attempt in range(max_retries):
+            context = _REQUEST_SCOPE.get()
+            budget = _BUDGET_SCOPE.get()
+            attempt_id = f"{context.request_id}:create:{uuid4().hex}" if context else uuid4().hex
+            client = self.client.with_options(max_retries=0) if budget is not None else self.client
+            create = client.chat.completions.create
+            if not callable(create):
+                raise TypeError("Provider cannot disable implicit retries")
+            if budget is not None:
+                from .context import estimate_tokens
+                if context is None:
+                    raise ValueError("Budgeted request requires a request context")
+                cap = params.get("max_completion_tokens", params.get("max_tokens"))
+                if type(cap) is not int or cap < 0:
+                    raise ValueError("Budgeted request requires a bounded output cap")
+                estimate = estimate_tokens(params.get("messages", []))
+                if params.get("tools"):
+                    estimate += estimate_tokens([{"role": "system", "content": json.dumps(params["tools"])}])
+                rates = None if context.input_price is None or context.output_price is None else {
+                    "input": str(context.input_price), "output": str(context.output_price)}
+                budget.reserve(attempt_id, {"input_tokens": estimate, "output_tokens": cap}, rates)
+                _ATTEMPT_SCOPE.set(attempt_id)
             try:
-                return self.client.chat.completions.create(**params)
+                return create(**params)
             except (RateLimitError, APITimeoutError, APIConnectionError):
                 context = _REQUEST_SCOPE.get()
                 if context:
-                    self._record_usage(context, f"{context.request_id}:create:{uuid4().hex}", 0, 0, False)
+                    self._record_usage(context, attempt_id, 0, 0, False)
                 if attempt == max_retries - 1:
                     raise
                 wait = 2**attempt
@@ -457,13 +498,17 @@ class LLM:
             except APIError as e:
                 context = _REQUEST_SCOPE.get()
                 if context:
-                    self._record_usage(context, f"{context.request_id}:create:{uuid4().hex}", 0, 0, False)
+                    self._record_usage(context, attempt_id, 0, 0, False)
                 # retry 5xx server errors but not 4xx; base APIError has no status_code so read it defensively
                 status_code = getattr(e, "status_code", None)
                 if status_code and status_code >= 500 and attempt < max_retries - 1:
                     time.sleep(2**attempt)
                 else:
                     raise
+            except BaseException:
+                if budget is not None:
+                    self._record_usage(context, attempt_id, 0, 0, False)
+                raise
 
 
 class LiteLLM(LLM):
@@ -502,6 +547,9 @@ class LiteLLM(LLM):
 
     def _call_with_retry(self, params: dict, max_retries: int = 3):
         """Retry on transient errors with exponential backoff via litellm."""
+        if _BUDGET_SCOPE.get() is not None:
+            from .budget import BudgetExceeded
+            raise BudgetExceeded("Budgeted LiteLLM calls are unsupported: provider retry control is not verified")
         import litellm
 
         params["drop_params"] = True

@@ -294,6 +294,26 @@ function ToolCard({
   );
 }
 
+type BudgetGroup = { requests: number; tokens: number; known_cost: string; unknown_cost_requests: number };
+type BudgetSnapshot = {
+  groups: { actual: BudgetGroup; in_flight: BudgetGroup; unconfirmed: BudgetGroup };
+  limits: { requests: number | null; total_tokens: number | null; cost: string | null };
+  report: { requests_remaining: number | null; tokens_remaining: number | null; cost_remaining: string | null;
+    cost_overage_known: string | null; tokens_overage: number; unknown_cost_requests: number };
+};
+
+function BudgetReport({ budget }: { budget: BudgetSnapshot | null }) {
+  if (!budget) return <p>预算数据不可用</p>;
+  const groups = [["已知实际", budget.groups.actual], ["在途预留", budget.groups.in_flight],
+    ["未确认", budget.groups.unconfirmed]] as const;
+  const remaining = (value: number | string | null, capped: boolean) => value === null ? (capped ? "未知" : "未设") : String(value);
+  return <section aria-label="运行预算报告"><h3>运行预算报告</h3><table><thead><tr><th>状态</th><th>请求</th><th>Token</th><th>已知美元</th><th>未知费用笔数</th></tr></thead>
+    <tbody>{groups.map(([label, group]) => <tr key={label}><th>{label}</th><td>{group.requests}</td><td>{group.tokens}</td><td>{group.known_cost}</td><td>{group.unknown_cost_requests}</td></tr>)}</tbody></table>
+    <p>剩余请求：{remaining(budget.report.requests_remaining, budget.limits.requests !== null)}；剩余 Token：{remaining(budget.report.tokens_remaining, budget.limits.total_tokens !== null)}；剩余费用：{remaining(budget.report.cost_remaining, budget.limits.cost !== null)}</p>
+    <p>已知费用超额：{budget.report.cost_overage_known ?? "未设"}；Token 超额：{budget.report.tokens_overage}；未知费用笔数：{budget.report.unknown_cost_requests}</p>
+  </section>;
+}
+
 function RunResultBanner({ result }: { result: RunResult }) {
   const copy =
     result.status === "completed"
@@ -391,6 +411,11 @@ export default function App() {
   const [streamText, setStreamText] = useState("");
   const [reasoning, setReasoning] = useState("");
   const [liveTools, setLiveTools] = useState<ToolEvent[]>([]);
+  const [budgetRequests, setBudgetRequests] = useState("");
+  const [budgetTokens, setBudgetTokens] = useState("");
+  const [budgetCost, setBudgetCost] = useState("");
+  const [budgetUnknown, setBudgetUnknown] = useState("deny_when_capped");
+  const [budgetView, setBudgetView] = useState<BudgetSnapshot | null>(null);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [notice, setNotice] = useState<{
     message: string;
@@ -418,17 +443,40 @@ export default function App() {
   const draftRef = useRef("");
   const sessionRef = useRef<Session | null>(null);
   const navigationRef = useRef(0);
+  const skillsGeneration = useRef(0);
   const autoScroll = useRef(true);
+
+  useEffect(() => {
+    const rid = session?.run_id;
+    if (!rid) { setBudgetView(null); return; }
+    let active = true;
+    let timer: number | undefined;
+    setBudgetView(null);
+    const refresh = async () => {
+      try {
+        const run = await api<{ budget?: BudgetSnapshot; status?: string }>(`run?id=${encodeURIComponent(rid)}`);
+        if (!active) return;
+        setBudgetView(run.budget ?? null);
+        if (run.status && !["completed", "failed", "cancelled", "interrupted"].includes(run.status))
+          timer = window.setTimeout(refresh, 1500);
+      } catch { if (active) timer = window.setTimeout(refresh, 1500); }
+    };
+    void refresh();
+    return () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
+  }, [session?.id, session?.run_id]);
 
   const flash = useCallback(
     (message: string, error = false) => setNotice({ message, error }),
     [],
   );
+  useEffect(() => () => { skillsGeneration.current += 1; }, []);
   const refreshList = useCallback(
     async () => setSessions(await api<SessionSummary[]>("sessions")),
     [],
   );
   const applySession = useCallback((value: Session) => {
+    if (sessionRef.current?.id !== value.id || sessionMode(sessionRef.current) !== sessionMode(value))
+      skillsGeneration.current += 1;
     setSession(value);
     sessionRef.current = value;
     setModelDraft(value.model);
@@ -750,7 +798,7 @@ export default function App() {
             setDraft(restored); draftRef.current = restored;
             setStreamText(""); setReasoning(""); setLiveTools([]);
             autoScroll.current = true;
-          } else { setSession(null); sessionRef.current = null; localStorage.removeItem("corecoder-session"); }
+          } else { skillsGeneration.current += 1; setSession(null); sessionRef.current = null; localStorage.removeItem("corecoder-session"); }
         }
       }
       flash(result.notice);
@@ -772,6 +820,7 @@ export default function App() {
     sendingRef.current = true;
     setSending(true);
     const prompt = draftRef.current.trim();
+    const generation = ++skillsGeneration.current;
     const commands: Record<string, () => void> = {
       "/help": () => setDialog("help"),
       "/tokens": () => {
@@ -822,10 +871,35 @@ export default function App() {
       setDialog("settings");
       return;
     }
-    if (prompt.startsWith("/") && !["/approve"].includes(prompt)) {
-      sendingRef.current = false;
-      setSending(false);
-      flash("未识别的命令，输入 /help 查看可用功能。", true);
+    if (prompt === "/skills") {
+      if (sessionMode(current) === "chat") {
+        sendingRef.current = false; setSending(false);
+        flash("聊天模式不读取项目技能。", true);
+        return;
+      }
+      sendingRef.current = false; setSending(false);
+      const skillSessionId = current.id;
+      const skillMode = sessionMode(current);
+      try {
+        const result = await api<{ skills: Array<{ name: string; source: string; conflict: boolean; valid: boolean; command: string }> }>(
+          `skills?id=${encodeURIComponent(current.id)}`,
+        );
+        if (generation !== skillsGeneration.current || sessionRef.current?.id !== skillSessionId || sessionMode(sessionRef.current) !== skillMode) return;
+        flash(result.skills.map((item) => `${item.command} | ${item.source}${item.conflict ? " | 冲突" : ""}${item.valid ? "" : " | 名称无效"}`).join("\n") || "没有可用技能。");
+        if (draftRef.current.trim() === prompt) { setDraft(""); draftRef.current = ""; }
+      } catch (error) {
+        if (generation === skillsGeneration.current && sessionRef.current?.id === skillSessionId && sessionMode(sessionRef.current) === skillMode)
+          flash((error as Error).message, true);
+      }
+      return;
+    }
+    const integerBudget = /^(0|[1-9]\d*)$/;
+    const decimalBudget = /^(?:\d+(?:\.\d*)?|\.\d+)$/;
+    if ((budgetRequests && (!integerBudget.test(budgetRequests) || !Number.isSafeInteger(Number(budgetRequests)))) ||
+        (budgetTokens && (!integerBudget.test(budgetTokens) || !Number.isSafeInteger(Number(budgetTokens)))) ||
+        (budgetCost && !decimalBudget.test(budgetCost))) {
+      sendingRef.current = false; setSending(false);
+      flash("预算必须是非负整数，费用必须是非负十进制数。", true);
       return;
     }
     if (
@@ -842,7 +916,13 @@ export default function App() {
     const id = runSession.id;
     let accepted = false;
     try {
-      const run = await api<RunInfo>("runs", { id, prompt });
+      const budget: Record<string, unknown> = {};
+      if (budgetRequests !== "") budget.requests = Number(budgetRequests);
+      if (budgetTokens !== "") budget.total_tokens = Number(budgetTokens);
+      if (budgetCost !== "") budget.cost = budgetCost;
+      if (Object.keys(budget).length) budget.unknown_policy = budgetUnknown;
+      const run = await api<RunInfo>("runs", { id, prompt, ...(Object.keys(budget).length ? { budget } : {}) });
+      setBudgetView(null);
       accepted = true;
       const optimistic = {
         ...runSession,
@@ -1341,11 +1421,13 @@ export default function App() {
                 </article>
               )}
               {!busy && runResult && <RunResultBanner result={runResult} />}
+
               <div ref={bottom} />
             </div>
           )}
         </div>
 
+        <BudgetReport budget={budgetView} />
         <div className="composer-region">
           {permission && (
             <section className="permission-banner" role="alert">
@@ -1472,6 +1554,7 @@ export default function App() {
               value={draft}
               rows={2}
               onChange={(e) => {
+                skillsGeneration.current += 1;
                 setDraft(e.target.value);
                 draftRef.current = e.target.value;
                 e.target.style.height = "auto";
@@ -1582,6 +1665,12 @@ export default function App() {
               )}
             </div>
           </form>
+          <details className="budget-controls"><summary>本次运行预算（可选）</summary>
+            <label>请求上限<input aria-label="请求上限" type="number" min="0" step="1" value={budgetRequests} onChange={(e) => setBudgetRequests(e.target.value)} /></label>
+            <label>Token 上限<input aria-label="Token 上限" type="number" min="0" step="1" value={budgetTokens} onChange={(e) => setBudgetTokens(e.target.value)} /></label>
+            <label>费用上限<input aria-label="费用上限" inputMode="decimal" value={budgetCost} onChange={(e) => setBudgetCost(e.target.value)} /></label>
+            <label>未知费用<select aria-label="未知费用" value={budgetUnknown} onChange={(e) => setBudgetUnknown(e.target.value)}><option value="deny_when_capped">有费用上限时拒绝</option><option value="allow_unknown">允许未知费用</option></select></label>
+          </details>
           <div className="composer-caption">
             <span>
               <ShieldCheck size={12} />

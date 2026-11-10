@@ -6,6 +6,7 @@ from .edit import EditFileTool
 from .glob_tool import GlobTool
 from .grep import GrepTool
 from .read import ReadFileTool
+from .repo_map import RepoMapTool
 from .todo import TodoWriteTool
 from .write import WriteFileTool
 
@@ -16,6 +17,7 @@ def create_tools(state=None):
         BashTool(state=state), ReadFileTool(state=state),
         WriteFileTool(state=state), EditFileTool(state=state),
         GlobTool(state=state), GrepTool(state=state),
+        RepoMapTool(state=state),
         TodoWriteTool(state=state), AgentTool(),
     ]
 

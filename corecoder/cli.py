@@ -41,6 +41,10 @@ def _parse_args():
     p.add_argument("--demo", action="store_true", help="Run the offline scripted demo (no API key needed)")
     p.add_argument("--json", action="store_true", help="Emit one structured JSON result")
     p.add_argument("--max-rounds", type=int, default=50, help="Maximum model/tool rounds (>=1)")
+    p.add_argument("--budget-requests", type=int, default=None)
+    p.add_argument("--budget-tokens", type=int, default=None)
+    p.add_argument("--budget-cost", default=None)
+    p.add_argument("--budget-unknown-policy", choices=("deny_when_capped", "allow_unknown"), default="deny_when_capped")
     p.add_argument("-r", "--resume", metavar="ID", help="Resume a saved session")
     p.add_argument("-v", "--version", action="version", version=f"%(prog)s {__version__}")
     return p.parse_args()
@@ -52,6 +56,16 @@ def main():
     max_rounds = getattr(args, "max_rounds", 50)
     if isinstance(max_rounds, bool) or max_rounds < 1:
         raise SystemExit(2)
+
+    from .budget import BudgetLimits
+    try:
+        configured = any(getattr(args, key, None) is not None for key in ("budget_requests", "budget_tokens", "budget_cost"))
+        limits = BudgetLimits(requests=getattr(args, "budget_requests", None), total_tokens=getattr(args, "budget_tokens", None),
+                              cost=getattr(args, "budget_cost", None),
+                              unknown_policy=getattr(args, "budget_unknown_policy", "deny_when_capped")) if configured else None
+    except (TypeError, ValueError) as exc:
+        err_console.print(f"Invalid budget: {exc}")
+        raise SystemExit(2) from exc
 
     if args.demo:
         from .demo import run_demo
@@ -181,10 +195,10 @@ def main():
 
     # one-shot mode
     if args.prompt:
-        raise SystemExit(_run_once(agent, args.prompt, json_output=args.json))
+        raise SystemExit(_run_once(agent, args.prompt, json_output=args.json, budget_limits=limits))
 
     # interactive REPL
-    _repl(agent, config)
+    _repl(agent, config, budget_limits=limits)
 
 
 def _ask_permission(tool_name: str, arguments: dict) -> str:
@@ -202,7 +216,7 @@ def _ask_permission(tool_name: str, arguments: dict) -> str:
     return "deny"
 
 
-def _run_once(agent: Agent, prompt: str, json_output: bool = False):
+def _run_once(agent: Agent, prompt: str, json_output: bool = False, budget_limits=None):
     """Non-interactive: run one prompt and exit."""
     perm = agent.permission
     if perm is not None and perm.ask is None and not perm.allow_all:
@@ -223,7 +237,10 @@ def _run_once(agent: Agent, prompt: str, json_output: bool = False):
         err_console.print(f"[dim]{tok}[/dim]", end="")
 
     try:
-        result = agent.chat_result(prompt, on_token=on_token, on_tool=on_tool, on_reasoning=on_reasoning)
+        kwargs = {"on_token": on_token, "on_tool": on_tool, "on_reasoning": on_reasoning}
+        if budget_limits is not None:
+            kwargs["budget_limits"] = budget_limits
+        result = agent.chat_result(prompt, **kwargs)
     except Exception as e:  # noqa: BLE001 - defensive wrapper for non-Agent test doubles
         from .results import RunResult
 
@@ -241,12 +258,14 @@ def _run_once(agent: Agent, prompt: str, json_output: bool = False):
         print(result.text)
     elif streamed:
         print()
+    if not json_output and result.budget is not None:
+        err_console.print("Budget: " + json.dumps(result.budget, ensure_ascii=False), markup=False)
     if result.status != "completed":
         err_console.print(f"{result.finish_reason}")
     return result.exit_code
 
 
-def _repl(agent: Agent, config: Config):
+def _repl(agent: Agent, config: Config, budget_limits=None):
     """Interactive read-eval-print loop."""
     perm = agent.permission
     mode = "auto-approve every tool call (--yes)" if (perm and perm.allow_all) else "ask before mutating tools"
@@ -387,21 +406,28 @@ def _repl(agent: Agent, config: Config):
             continue
         if user_input == "/compact":
             try:
+                from .budget import BudgetExceeded, RunBudget
                 from .context import estimate_tokens, output_reserve_for
+                from .llm import budget_scope
+                if budget_limits is not None and type(agent.llm) is not LLM:
+                    raise BudgetExceeded("Model client does not support run budgets")
+                compact_budget = RunBudget(budget_limits) if budget_limits is not None else None
 
                 before = estimate_tokens(agent.messages)
                 full_messages = agent._full_messages() if hasattr(agent, "_full_messages") else []
                 system = full_messages[0].get("content", "") if full_messages else getattr(agent, "_system", "")
                 tools = agent._tool_schemas() if hasattr(agent, "_tool_schemas") else []
                 state = getattr(agent, "state", None)
-                result = agent.context.prepare_request(
-                    agent.messages,
-                    system=system,
-                    tools=tools,
-                    output_reserve=output_reserve_for(agent.llm, 4096),
-                    artifact_dir=getattr(state, "artifact_dir", None),
-                    llm=agent.llm,
-                )
+                try:
+                    with budget_scope(compact_budget):
+                        result = agent.context.prepare_request(
+                            agent.messages, system=system, tools=tools,
+                            output_reserve=output_reserve_for(agent.llm, 4096),
+                            artifact_dir=getattr(state, "artifact_dir", None), llm=agent.llm,
+                        )
+                finally:
+                    if compact_budget is not None:
+                        console.print("Budget: " + json.dumps(compact_budget.snapshot(), ensure_ascii=False), markup=False)
                 if result.budget_ok and result.changed:
                     agent.messages[:] = result.messages
                 compressed = result.budget_ok and result.changed
@@ -489,10 +515,20 @@ def _repl(agent: Agent, config: Config):
             _mcp(user_input[4:].strip())
             continue
 
-        # an unknown /command shouldn't be sent to the model as a prompt
         if user_input.startswith("/"):
-            console.print(f"[yellow]Unknown command: {user_input.split()[0]} (try /help)[/yellow]")
-            continue
+            from .skill_commands import skill_command
+            try:
+                kind, value = skill_command(agent.state.workspace_root, user_input, getattr(agent, "chat_mode", False))
+                if kind == "list":
+                    console.print(value, markup=False)
+                    continue
+                user_input = value
+            except LookupError:
+                console.print(f"Unknown command: {user_input.split()[0]} (try /help)", markup=False)
+                continue
+            except (ValueError, OSError, UnicodeError) as exc:
+                console.print(f"Skill error: {exc}", markup=False)
+                continue
 
         # call the agent
         streamed: list[str] = []
@@ -511,7 +547,15 @@ def _repl(agent: Agent, config: Config):
             console.print(f"[dim]{tok}[/dim]", end="")
 
         try:
-            response = agent.chat(user_input, on_token=on_token, on_tool=on_tool, on_reasoning=on_reasoning)
+            if budget_limits is None:
+                response = agent.chat(user_input, on_token=on_token, on_tool=on_tool, on_reasoning=on_reasoning)
+            else:
+                result = agent.chat_result(user_input, on_token=on_token, on_tool=on_tool, on_reasoning=on_reasoning,
+                                           budget_limits=budget_limits)
+                console.print("Budget: " + json.dumps(result.budget, ensure_ascii=False), markup=False)
+                if result.status == "failed":
+                    raise result.error or RuntimeError(result.finish_reason)
+                response = result.text
             if getattr(getattr(agent, "last_result", None), "status", None) == "max_rounds":
                 console.print("\n[yellow]max_rounds: tool loop reached its configured limit.[/yellow]")
             if streamed:
