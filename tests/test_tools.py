@@ -8,7 +8,7 @@ from tests.conftest import get_tool
 
 
 def test_tool_count():
-    assert len(ALL_TOOLS) == 8
+    assert len(ALL_TOOLS) == 9
 
 
 def test_all_tools_have_valid_schema():
@@ -340,7 +340,8 @@ def test_glob_nonexistent_path():
 def test_glob_path_is_file():
     glob_t = get_tool("glob")
     r = glob_t.execute(pattern="*.py", path=__file__)
-    assert "not a directory" in r.lower()
+    assert "test_tools.py" in r
+    assert "Error" in glob_t.execute(pattern="*.py", path="/nonexistent_dir_abc")
 
 
 # --- grep ---
@@ -368,21 +369,22 @@ def test_grep_searches_under_skip_named_ancestor(tmp_path):
     root = tmp_path / "build" / "proj"  # 'build' is in _SKIP_DIRS
     root.mkdir(parents=True)
     (root / "code.py").write_text("needle here\n", encoding="utf-8")
-    grep = get_tool("grep")
+    from corecoder.state import SessionState
+    from corecoder.tools.grep import GrepTool
+    grep = GrepTool(SessionState(workspace_root=root, cwd=root))
     r = grep.execute(pattern="needle", path=str(root))
     assert "needle" in r
 
 
 def test_grep_reports_truncated_file_scan(monkeypatch, tmp_path):
     """A truncated file scan must be reported as an incomplete result."""
-    grep = get_tool("grep")
-    def fake_walk(root, include):
-        return [], True
-    monkeypatch.setattr(type(grep), "_walk", staticmethod(fake_walk))
+    from corecoder.state import SessionState
+    from corecoder.tools.grep import GrepTool
+    grep = GrepTool(SessionState(workspace_root=tmp_path))
+    monkeypatch.setattr("corecoder.tools.grep.inventory", lambda root, base: ([], "test", True))
     r = grep.execute(pattern="needle", path=str(tmp_path))
-    assert "No matches found in scanned files." in r
-    assert "5000 file scan limit reached" in r
-    assert "results may be incomplete" in r
+    assert "No matches found" in r
+    assert "incomplete" in r and "file scan limit" in r
 
 
 def test_grep_skips_junk_dirs_inside_root(tmp_path):
@@ -390,7 +392,9 @@ def test_grep_skips_junk_dirs_inside_root(tmp_path):
     (tmp_path / "node_modules").mkdir()
     (tmp_path / "node_modules" / "junk.py").write_text("needle\n", encoding="utf-8")
     (tmp_path / "real.py").write_text("needle\n", encoding="utf-8")
-    grep = get_tool("grep")
+    from corecoder.state import SessionState
+    from corecoder.tools.grep import GrepTool
+    grep = GrepTool(SessionState(workspace_root=tmp_path))
     r = grep.execute(pattern="needle", path=str(tmp_path))
     assert "real.py" in r
     assert "node_modules" not in r

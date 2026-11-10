@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
-[![engine](https://img.shields.io/badge/engine-2296_LoC-blue)](article/00-index_EN.md)
+[![engine](https://img.shields.io/badge/engine-2454_LoC-blue)](article/00-index_EN.md)
 [![essays](https://img.shields.io/badge/source--reading-8_bilingual-orange)](article/00-index_EN.md)
 
 </div>
@@ -36,7 +36,7 @@ The nanoGPT column is there as a reference point: minimal, readable, but it teac
 
 I've always felt coding agents get talked about as if they were arcane. Strip a tool like Claude Code or Cursor all the way down and the core is a `while` loop wrapped around a large model, plus seven or eight tools that let it actually do things. The hard part was never the loop; it's everything the loop has to cope with once it meets the real world. CoreCoder is the minimal version that writes that core out honestly.
 
-The engine (loop, model interface, context, tools, sessions) is 2,291 lines once you drop blank lines and comments. Counting the outer CLI, config and packaging too, the whole package is 35 files: 6,450 physical lines, 5,619 net. The growth since the original 1,161-line snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation and usage accounting.
+The engine (loop, model interface, context, tools, sessions) is 2,454 lines once you drop blank lines and comments. Counting the outer CLI, config and packaging too, the whole package is 41 files: 7,317 physical lines, 6,419 net. The growth since the original 1,161-line snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation and usage accounting.
 
 And it really runs: reads and writes files, executes shell, spawns sub-agents, budgets requests and archives context, and tells you the tokens and dollars a run burned whenever you ask. Anything that would mutate your disk or run a command stops for your consent first. The regression suite checks these behaviors. But the point of it running isn't to become your daily driver. It runs so the walkthrough can't lie: a reference that shows how an agent works has to actually work.
 
@@ -118,7 +118,7 @@ examples/
 └── plan_hooks_demo.py  offline plan mode + hooks demo (no API key)
 ```
 
-Eight tools: `bash`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `todo_write` (a task checklist the agent maintains for itself), and `agent` (which spawns a sub-agent). Everything else is the CLI shell, config, and packaging wrapped around that engine core. If `~/.corecoder/mcp.json` exists, its MCP servers join the eight as extra `mcp__*` tools; the MCP section below covers it.
+Nine tools: `bash`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `repo_map`, `todo_write` (a task checklist the agent maintains for itself), and `agent` (which spawns a sub-agent). Everything else is the CLI shell, config, and packaging wrapped around that engine core. If `~/.corecoder/mcp.json` exists, its MCP servers join these as extra `mcp__*` tools; the MCP section below covers it.
 
 ## A `while` loop is the whole agent
 
@@ -157,7 +157,7 @@ I also wrote a bilingual source-reading series, one intro plus eight parts, each
 
 - **[Intro · Read Claude Code through CoreCoder, then build your own](article/00-index_EN.md)**
 - **[01 · An agent, at its core, is a `while` loop](article/01-the-loop_EN.md)** — the main loop in `agent.py`, interrupts, and the round limit
-- **[02 · The tool system: letting the model act, safely](article/02-tools_EN.md)** — the eight tools in `tools/` and the bash safety gate
+- **[02 · The tool system: letting the model act, safely](article/02-tools_EN.md)** — the nine tools in `tools/` and the bash safety gate
 - **[03 · Plug in any LLM, and keep the bill honest](article/03-llm-and-cost_EN.md)** — `llm.py`'s provider wrapper, retries, and cost accounting
 - **[04 · Surviving a long task on a finite window](article/04-context_EN.md)** — `context.py`'s three-tier compaction and orphaned tool messages
 - **[05 · Parallel execution and sub-agents](article/05-parallel-and-subagents_EN.md)** — thread-pool concurrency and sub-agent isolation
@@ -313,3 +313,11 @@ Project checks are manually authorized commands in `.corecoder/checks.json`. The
 ```
 
 From a source checkout (the wheel does not include the web backend), run the isolated scripted regression suite with `python -m corecoder.evaluation --output ./evaluation-output`; add `--task agent` to select one fixture. Reports and fixture repositories are retained under the output directory. The scripted model and synthetic costs measure system behavior, not model quality or real spending.
+
+## Repository search, skills, and run budgets
+
+`grep`, `glob`, and `repo_map` scan the current workspace on demand. Use `offset` and `limit` to page results; edits between calls can change page boundaries. Search respects ignore rules and excludes sensitive paths and links. Scans have file, byte, output, and time limits; an incomplete marker means results may be partial. Regex matching runs in an isolated worker with a five-second deadline. A fixed-repository comparison found the new isolated search slower on small queries; it is not a speed guarantee.
+
+Use `/skills` to list names, sources, and conflicts; invoke `/<name> [task]` explicitly. For conflicts or reserved command names use `/<name>@<source> [task]`, for example `/review@builtin changes`. Project skills live in `.corecoder/skills/<name>/SKILL.md`; optional frontmatter supports `version:` and comma-separated `files:`. At most eight relative text files and 32 KiB total are loaded. See [the project skill example](designDocument/priority_2026_11_08/SKILLS.md). Skills are user-provided text and do not grant additional permissions.
+
+Set per-run limits with `--budget-requests`, `--budget-tokens`, `--budget-cost` (decimal USD), and optionally `--budget-unknown-policy allow_unknown`. Web offers the same controls. Zero prohibits that resource; empty limits keep the default unrestricted behavior. Parent, child, retries and summaries share one run budget. With a cost cap, unknown prices are denied by default; explicit `allow_unknown` reports uncertainty. Token inputs are estimates and provider billing can differ. Budget enforcement currently supports the OpenAI-compatible adapter; budgeted LiteLLM requests are rejected before sending.

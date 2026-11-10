@@ -122,6 +122,8 @@ def make_handler(service: Service, frontend: Path):
                     return self.reply(service.summaries())
                 if url.path == "/api/saved-sessions":
                     return self.reply(service.saved_sessions())
+                if url.path == "/api/skills":
+                    return self.reply(service.skills(parse_qs(url.query).get("id", [""])[0]))
                 if url.path == "/api/session":
                     return self.reply(service.get(parse_qs(url.query).get("id", [""])[0]).snapshot())
                 if url.path == "/api/changes":
@@ -182,7 +184,7 @@ def make_handler(service: Service, frontend: Path):
                     prompt = data.get("prompt", "")
                     if not isinstance(prompt, str):
                         raise RequestError("任务必须是文本。")
-                    rid = service.start(sid, prompt, legacy_events=False)
+                    rid = service.start(sid, prompt, legacy_events=False, budget=data.get("budget"))
                     return self.reply(service.runs.view(rid), 201)
                 if path == "/api/approve":
                     service.approve(data.get("id", ""), data.get("permission_id", ""), data.get("answer", "deny"))

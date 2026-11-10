@@ -205,3 +205,67 @@ describe("workbench mode selection", () => {
     expect(mocks.chat).not.toHaveBeenCalled();
   });
 });
+
+describe("skill listing request isolation", () => {
+  it("preserves an edited draft when a listing returns late", async () => {
+    let resolve!: (value: unknown) => void;
+    const previous = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation((path: string, body?: Record<string, unknown>) => path.startsWith("skills?")
+      ? new Promise((done) => { resolve = done; }) : previous(path, body));
+    const user = userEvent.setup();
+    render(<App />);
+    const composer = await screen.findByLabelText<HTMLTextAreaElement>("输入任务");
+    await user.type(composer, "/skills");
+    await user.click(screen.getByRole("button", { name: "发送任务" }));
+    await user.clear(composer); await user.type(composer, "new draft");
+    await act(async () => resolve({ skills: [{ name: "review", source: "builtin", command: "/review@builtin", valid: true, conflict: false }] }));
+    expect(composer.value).toBe("new draft");
+    expect(screen.queryByText(/\/review@builtin \| builtin/)).toBeNull();
+  });
+
+  it("ignores a response after switching away and back", async () => {
+    let resolve!: (value: unknown) => void;
+    const previous = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation((path: string, body?: Record<string, unknown>) => path.startsWith("skills?")
+      ? new Promise((done) => { resolve = done; }) : previous(path, body));
+    const user = userEvent.setup();
+    render(<App />);
+    const composer = await screen.findByLabelText<HTMLTextAreaElement>("输入任务");
+    await user.type(composer, "/skills");
+    await user.click(screen.getByRole("button", { name: "发送任务" }));
+    await waitFor(() => expect(resolve).toBeDefined());
+    await user.click(screen.getByRole("button", { name: /对话乙/ }));
+    await user.click(screen.getByRole("button", { name: /对话甲/ }));
+    await act(async () => resolve({ skills: [{ name: "review", source: "builtin", command: "/review@builtin", valid: true, conflict: false }] }));
+    expect(screen.queryByText(/\/review@builtin \| builtin/)).toBeNull();
+  });
+
+  it("does not request skills in chat mode", async () => {
+    sessions.a.mode = "chat";
+    const user = userEvent.setup();
+    render(<App />);
+    const composer = await screen.findByLabelText<HTMLTextAreaElement>("输入任务");
+    await user.type(composer, "/skills");
+    await user.click(screen.getByRole("button", { name: "发送任务" }));
+    expect(mocks.api.mock.calls.some(([path]) => String(path).startsWith("skills?"))).toBe(false);
+  });
+});
+
+it("a late skills response cannot unlock a pending run", async () => {
+  let finishSkills!: (value: unknown) => void;
+  const previous = mocks.api.getMockImplementation()!;
+  mocks.api.mockImplementation((path: string, body?: Record<string, unknown>) => {
+    if (path.startsWith("skills?")) return new Promise((done) => { finishSkills = done; });
+    if (path === "runs") return new Promise(() => {});
+    return previous(path, body);
+  });
+  const user = userEvent.setup();
+  render(<App />);
+  const composer = await screen.findByLabelText<HTMLTextAreaElement>("输入任务");
+  await user.type(composer, "/skills");
+  await user.click(screen.getByRole("button", { name: "发送任务" }));
+  await user.clear(composer); await user.type(composer, "new task");
+  await user.click(screen.getByRole("button", { name: "发送任务" }));
+  await act(async () => finishSkills({ skills: [] }));
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "发送任务" }).disabled).toBe(true);
+});

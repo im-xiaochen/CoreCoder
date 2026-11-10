@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
-[![engine](https://img.shields.io/badge/engine-2296_LoC-blue)](article/)
+[![engine](https://img.shields.io/badge/engine-2454_LoC-blue)](article/)
 [![源码导读](https://img.shields.io/badge/源码导读-8篇双语-orange)](article/)
 
 </div>
@@ -126,7 +126,7 @@ examples/
 └── plan_hooks_demo.py  离线 plan mode + hooks 演示（免 API key）
 ```
 
-八个工具：`bash`、`read_file`、`write_file`、`edit_file`、`glob`、`grep`、`todo_write`（agent 自己维护的任务清单）、`agent`（派子 agent）。其余都是包在引擎核心外面的 CLI 外壳、配置和打包。存在 `~/.corecoder/mcp.json` 时，里面的 MCP 服务器会以 `mcp__*` 工具的身份并进这八件里，下面有专门一节讲。
+九个工具：`bash`、`read_file`、`write_file`、`edit_file`、`glob`、`grep`、`repo_map`、`todo_write`（agent 自己维护的任务清单）、`agent`（派子 agent）。其余都是包在引擎核心外面的 CLI 外壳、配置和打包。存在 `~/.corecoder/mcp.json` 时，里面的 MCP 服务器会以 `mcp__*` 工具的身份并进这些工具里，下面有专门一节讲。
 
 ## 一个 while 循环就是 agent 的本体
 
@@ -165,7 +165,7 @@ def chat(self, user_input):
 
 - **[导言 · 用 CoreCoder 读懂 Claude Code，再造一个你自己的](article/00-index.md)**
 - **[01 一个 agent 的本体，是一个 while 循环](article/01-the-loop.md)** — `agent.py` 的主循环、打断与轮次上限
-- **[02 工具系统：让模型安全地动手](article/02-tools.md)** — `tools/` 八个工具与 bash 安全闸
+- **[02 工具系统：让模型安全地动手](article/02-tools.md)** — `tools/` 九个工具与 bash 安全闸
 - **[03 接入任意大模型，顺便把账算清楚](article/03-llm-and-cost.md)** — `llm.py` 的 provider 包装、重试与成本统计
 - **[04 用有限的窗口扛住一个长任务](article/04-context.md)** — `context.py` 的三层压缩与孤儿 tool 消息
 - **[05 并行执行与子 agent](article/05-parallel-and-subagents.md)** — 线程池并发与子 agent 隔离
@@ -177,7 +177,7 @@ def chat(self, user_input):
 
 读懂之后，最自然的下一步就是 fork。起手不用伤筋动骨：
 
-- **换个你常用的模型。** 就是上面那两个环境变量，`llm.py`（526 行）是所有 provider 适配的入口。
+- **换个你常用的模型。** 就是上面那两个环境变量，`llm.py`（574 行）是所有 provider 适配的入口。
 - **加一件你自己的工具。** 照 `tools/base.py`（78 行）的工具基类写个新文件，跑测试、抓网页、调 LSP 都行，第二篇文章末尾手把手带你写第一个。
 - **改系统提示词。** `prompt.py` 才 50 行，改一句就能看到 agent 的脾气变了，是门槛最低的「改一处就有反馈」。
 - **直接当库 import。** 顶层导出了 `Agent`、`LLM`、`Config`，能嵌进你自己的程序：
@@ -320,3 +320,11 @@ REPL 里 `/plan` 开关计划模式。开着的时候，提示符变成 `(plan)`
 ```
 
 在源码检出目录运行 `python -m corecoder.evaluation --output ./evaluation-output` 执行隔离的脚本化回归（wheel 不包含网页后端），附加 `--task agent` 可选择单项。报告和临时仓库证据保留在输出目录；脚本模型和合成费用用于验证系统行为，并非模型能力或真实账单。
+
+## 仓库检索、技能与运行预算
+
+`grep`、`glob` 和 `repo_map` 按需扫描工作区；使用 `offset`、`limit` 翻页，翻页之间文件变化可能改变边界。检索遵守忽略规则，排除敏感路径和链接；文件、字节、输出和时间均有限额，出现 incomplete 表示结果可能不完整。正则匹配在独立进程中执行，时限为五秒。固定仓库对照中，小查询的新实现较慢，不保证提速。
+
+输入 `/skills` 查看技能名、来源与冲突；显式输入 `/<name> [任务]` 调用。同名或保留命令使用 `/<name>@<source> [任务]`，例如 `/review@builtin 检查变更`。项目技能位于 `.corecoder/skills/<name>/SKILL.md`，可选前导字段 `version:` 和逗号分隔的 `files:`，最多八个相对文本文件、总计 32 KiB。详见[项目技能示例](designDocument/priority_2026_11_08/SKILLS.md)。技能作为用户资料，不增加权限。
+
+每次运行可用 `--budget-requests`、`--budget-tokens`、`--budget-cost`（美元十进制字符串）及 `--budget-unknown-policy allow_unknown` 配置预算，Web 也提供相应控件。零表示禁止，留空保持默认无限额；父任务、子任务、重试和摘要共享同一运行预算。设置费用上限时默认拒绝未知价格，显式允许后会报告不确定笔数。输入 token 是估算，供应商实际账单可能不同。预算目前支持 OpenAI 兼容适配器；LiteLLM 开启预算时会在发送前拒绝。

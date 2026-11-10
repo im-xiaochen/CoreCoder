@@ -14,6 +14,7 @@ class RunResult:
     usage: dict = field(default_factory=dict)
     finish_reason: str = "completed"
     error: BaseException | None = None
+    budget: dict | None = None
 
     @property
     def exit_code(self) -> int:
@@ -28,6 +29,7 @@ class RunResult:
             "tool_errors": self.tool_errors,
             "usage": self.usage,
             "finish_reason": self.finish_reason,
+            "budget": self.budget,
             "exit_code": self.exit_code,
         }
 

@@ -406,7 +406,10 @@ class ContextManager:
                 try:
                     resp = llm.chat(messages=request)
                     outputs.append(resp.content or self._extract_key_info(messages, only_text=chunk))
-                except Exception:  # noqa: BLE001  # preserve canonical history on provider errors
+                except Exception as exc:  # preserve canonical history on provider errors
+                    from .budget import BudgetExceeded
+                    if isinstance(exc, BudgetExceeded):
+                        raise
                     outputs.append(self._extract_key_info(messages, only_text=chunk))
             if outputs:
                 return "\n".join(outputs)

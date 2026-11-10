@@ -91,7 +91,10 @@ class AgentTool(Tool):
             if len(result) > 5000:
                 result = result[:4500] + "\n... (sub-agent output truncated)"
             return f"[Sub-agent completed]\n{result}"
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
+            from ..budget import BudgetExceeded
+            if isinstance(e, BudgetExceeded):
+                raise
             return f"Sub-agent error: {e}"
         finally:
             if get_tracked_cwd() != parent_tracked_cwd:

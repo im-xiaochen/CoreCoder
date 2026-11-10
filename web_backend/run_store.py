@@ -70,6 +70,21 @@ class RunStore:
             self.runs[run['id']] = run
             return run['id']
 
+    def budget(self, rid, snapshot):
+        with self.lock:
+            run = self.runs[rid]
+            previous = run.get("budget")
+            run["budget"] = snapshot
+            try:
+                self._save(run)
+            except Exception:
+                if previous is None:
+                    run.pop("budget", None)
+                else:
+                    run["budget"] = previous
+                raise
+            self.changed.notify_all()
+
     def status(self, rid, status):
         with self.lock:
             run = self.runs[rid]
