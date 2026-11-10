@@ -14,6 +14,7 @@ class RepoMapTool(Tool):
     description = "List workspace files, directories and Python definitions/imports; rescans on demand."
     parameters: ClassVar[dict] = {
         "type": "object",
+        "required": [],
         "properties": {
             "path": {"type": "string"},
             "query": {"type": "string"},

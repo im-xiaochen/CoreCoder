@@ -60,10 +60,17 @@ def test_reject_unsafe_and_binary(tmp_path):
         resolve_skill(snapshot, "custom")
 
 
-def test_bundled_templates_present_in_wheel():
-    wheels = list((Path(__file__).parent.parent / ".phase3-preparation" / "skill-wheel").glob("*.whl"))
-    assert wheels
-    with zipfile.ZipFile(wheels[0]) as wheel:
+@pytest.fixture(scope="module")
+def built_wheel(tmp_path_factory):
+    target = tmp_path_factory.mktemp("wheel")
+    root = Path(__file__).resolve().parent.parent
+    subprocess.run([sys.executable, "-m", "pip", "wheel", str(root), "--no-deps", "-w", str(target)],
+                   check=True, capture_output=True)
+    return next(target.glob("*.whl"))
+
+
+def test_bundled_templates_present_in_wheel(built_wheel):
+    with zipfile.ZipFile(built_wheel) as wheel:
         for name in ("review", "test", "pr-summary"):
             assert f"corecoder/builtin_skills/{name}/SKILL.md" in wheel.namelist()
 
@@ -91,9 +98,8 @@ def test_replaced_directory_junction_rejected(tmp_path):
             directory.unlink()
 
 
-def test_wheel_isolated_builtin_loading(tmp_path):
-    wheel = next((Path(__file__).parent.parent / ".phase3-preparation" / "skill-wheel").glob("*.whl"))
-    with zipfile.ZipFile(wheel) as archive:
+def test_wheel_isolated_builtin_loading(tmp_path, built_wheel):
+    with zipfile.ZipFile(built_wheel) as archive:
         archive.extractall(tmp_path / "installed")
     code = ("import sys; sys.path.insert(0, sys.argv[1]); "
             "from corecoder.skills import list_skills, resolve_skill; "

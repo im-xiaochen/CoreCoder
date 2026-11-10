@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
-[![engine](https://img.shields.io/badge/engine-2453_LoC-blue)](article/00-index_EN.md)
+[![engine](https://img.shields.io/badge/engine-2454_LoC-blue)](article/00-index_EN.md)
 [![essays](https://img.shields.io/badge/source--reading-8_bilingual-orange)](article/00-index_EN.md)
 
 </div>
@@ -36,7 +36,7 @@ The nanoGPT column is there as a reference point: minimal, readable, but it teac
 
 I've always felt coding agents get talked about as if they were arcane. Strip a tool like Claude Code or Cursor all the way down and the core is a `while` loop wrapped around a large model, plus seven or eight tools that let it actually do things. The hard part was never the loop; it's everything the loop has to cope with once it meets the real world. CoreCoder is the minimal version that writes that core out honestly.
 
-The engine (loop, model interface, context, tools, sessions) is 2,453 lines once you drop blank lines and comments. Counting the outer CLI, config and packaging too, the whole package is 41 files: 7,313 physical lines, 6,415 net. The growth since the original 1,161-line snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation and usage accounting.
+The engine (loop, model interface, context, tools, sessions) is 2,454 lines once you drop blank lines and comments. Counting the outer CLI, config and packaging too, the whole package is 41 files: 7,317 physical lines, 6,419 net. The growth since the original 1,161-line snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation and usage accounting.
 
 And it really runs: reads and writes files, executes shell, spawns sub-agents, budgets requests and archives context, and tells you the tokens and dollars a run burned whenever you ask. Anything that would mutate your disk or run a command stops for your consent first. The regression suite checks these behaviors. But the point of it running isn't to become your daily driver. It runs so the walkthrough can't lie: a reference that shows how an agent works has to actually work.
 

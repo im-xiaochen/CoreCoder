@@ -120,3 +120,32 @@ def test_unsupported_client_updates_last_result():
     agent = Agent(llm=SimpleNamespace(), tools=[])
     result = agent.chat_result("hello", budget_limits=BudgetLimits(requests=1))
     assert agent.last_result is result and result.finish_reason == "budget_exceeded"
+
+
+def test_browser_subagent_budget_stops_later_batch_write(tmp_path, monkeypatch):
+    from corecoder.agent import Agent
+    from corecoder.budget import BudgetExceeded
+    from corecoder.llm import ToolCall
+    from corecoder.state import SessionState
+    from corecoder.tools.write import WriteFileTool
+    from web_backend import service
+
+    class Child:
+        def __init__(self, *args, **kwargs):
+            pass
+        def chat(self, task):
+            (tmp_path / "child.txt").write_text("done")
+            raise BudgetExceeded("limit")
+
+    monkeypatch.setattr(service, "BrowserAgent", Child)
+    state = SessionState(workspace_root=tmp_path)
+    tool = service.BrowserAgentTool()
+    parent = Agent(llm=object(), state=state, tools=[tool, WriteFileTool(state=state)])
+    parent.session = object()
+    calls = [ToolCall(id="child", name="agent", arguments={"task": "child"}),
+             ToolCall(id="later", name="write_file", arguments={"file_path": str(tmp_path / "later.txt"), "content": "bad"})]
+    import pytest
+    with pytest.raises(BudgetExceeded):
+        parent._exec_tools_parallel(calls)
+    assert (tmp_path / "child.txt").read_text() == "done"
+    assert not (tmp_path / "later.txt").exists()

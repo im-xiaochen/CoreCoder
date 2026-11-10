@@ -225,7 +225,10 @@ class BrowserAgentTool(AgentTool):
             if len(result) > 5000:
                 result = result[:4500] + "\n... (sub-agent output truncated)"
             return f"[Sub-agent completed]\n{result}"
-        except Exception as exc:  # noqa: BLE001 - matches the existing agent tool boundary
+        except Exception as exc:
+            from corecoder.budget import BudgetExceeded
+            if isinstance(exc, BudgetExceeded):
+                raise
             return f"Sub-agent error: {exc}"
         finally:
             pass

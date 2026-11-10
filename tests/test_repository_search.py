@@ -1,4 +1,6 @@
 """Focused offline checks for workspace search."""
+import subprocess
+
 from corecoder.repository_search import inventory
 from corecoder.state import SessionState
 from corecoder.tools.glob_tool import GlobTool
@@ -7,6 +9,7 @@ from corecoder.tools.repo_map import RepoMapTool
 
 
 def fixture(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, capture_output=True)
     (tmp_path / "sub").mkdir()
     (tmp_path / "a.py").write_text("from pkg.sub import thing\ndef alpha(): pass\n")
     (tmp_path / "sub" / "b.py").write_text("def beta(): pass\n")

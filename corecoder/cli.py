@@ -198,7 +198,10 @@ def main():
         raise SystemExit(_run_once(agent, args.prompt, json_output=args.json, budget_limits=limits))
 
     # interactive REPL
-    _repl(agent, config, budget_limits=limits)
+    if limits is None:
+        _repl(agent, config)
+    else:
+        _repl(agent, config, budget_limits=limits)
 
 
 def _ask_permission(tool_name: str, arguments: dict) -> str:

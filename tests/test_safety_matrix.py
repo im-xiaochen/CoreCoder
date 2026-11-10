@@ -147,7 +147,10 @@ def test_plan_mode_parallel_batch_refuses_writes_but_runs_reads(tmp_path):
     """Plan mode inside a parallel batch: the read executes, the write is
     refused, and both answers land on their own call ids."""
     (tmp_path / "note.txt").write_text("hello\n", encoding="utf-8")
+    from corecoder.state import SessionState
+    state = SessionState(workspace_root=tmp_path)
     agent = Agent(
+        state=state,
         llm=ScriptedLLM([
             LLMResponse(tool_calls=[
                 _write_call("c1", tmp_path / "a.txt"),
@@ -156,7 +159,7 @@ def test_plan_mode_parallel_batch_refuses_writes_but_runs_reads(tmp_path):
             ]),
             LLMResponse(content="plan ready"),
         ]),
-        tools=[WriteFileTool(), GrepTool()],
+        tools=[WriteFileTool(state=state), GrepTool(state=state)],
         permission=Permission(allow_all=True),
     )
     agent.plan_mode = True
@@ -190,7 +193,10 @@ def test_ctrl_c_backfills_every_unanswered_tool_call(tmp_path):
 def test_ctrl_c_in_a_parallel_batch_backfills_the_whole_batch(tmp_path):
     """One interrupted call must not strand its siblings either."""
     (tmp_path / "note.txt").write_text("hello\n", encoding="utf-8")
+    from corecoder.state import SessionState
+    state = SessionState(workspace_root=tmp_path)
     agent = Agent(
+        state=state,
         llm=ScriptedLLM([
             LLMResponse(tool_calls=[
                 ToolCall(id="c1", name="grep",
@@ -198,7 +204,7 @@ def test_ctrl_c_in_a_parallel_batch_backfills_the_whole_batch(tmp_path):
                 ToolCall(id="c2", name="boom", arguments={}),
             ]),
         ]),
-        tools=[GrepTool(), _BoomTool()],
+        tools=[GrepTool(state=state), _BoomTool()],
     )
 
     with pytest.raises(KeyboardInterrupt):
