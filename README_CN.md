@@ -2,7 +2,7 @@
 
 # CoreCoder
 
-**编程 agent 里的 nanoGPT。2.2k 行引擎、整包 5326 行纯 Python，读懂一个 coding agent 到底怎么运作，再 fork 出你自己的。**
+**编程 agent 里的 nanoGPT。2,572 行引擎，整包 6,754 行有效 Python 代码。读懂一个 coding agent 到底怎么运作，再 fork 出你自己的。**
 
 *learn from it · fork it · ship something better*
 
@@ -12,7 +12,6 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
-[![engine](https://img.shields.io/badge/engine-2454_LoC-blue)](article/)
 [![源码导读](https://img.shields.io/badge/源码导读-8篇双语-orange)](article/)
 
 </div>
@@ -25,7 +24,7 @@
 
 | | CoreCoder | Claude Code | aider | nanoGPT |
 |---|---|---|---|---|
-| 代码量 | 引擎约 2291 行 / 整包 5326 行 | 几十万行（闭源） | 数万行 Python | 约 600 行（两个文件） |
+| 代码量 | 引擎 2,572 行 / 整包 6,754 行（7,667 个物理行） | 几十万行（闭源） | 数万行 Python | 约 600 行（两个文件） |
 | 读完要多久 | 一个下午 | 读不了（闭源） | 得啃几天 | 一个下午 |
 | 能不能下断点改了再跑 | 能，每一行 | 不能 | 能，但量大 | 能 |
 | 定位 | 读懂并 fork 出你自己的 agent | 生产级编程助手 | 终端结对编程 | 教学用最小 GPT |
@@ -36,7 +35,7 @@ nanoGPT 那一列是拿来对照的：它最小、可读，但教的是训一个
 
 我一直觉得 coding agent 被讲得太玄了。把 Claude Code、Cursor 这类工具扒到底，核心是一个 while 循环套着一个大模型，外加七八个让它能真正动手的工具。难的从来不是这个循环，而是循环跑进真实世界以后要兜的那些底。CoreCoder 就是把这个核心老老实实写出来的最小版本。
 
-引擎部分（循环、模型接口、上下文、工具、会话）去掉空行和注释是 2291 行。连最外层的 CLI、配置、打包一起算，整个包 32 个文件、物理 5326 行、净 4563 行。自 1161 行快照之后增加了 plan mode、hooks、checkpoints、请求预算、工具校验和用量账本等功能。
+`corecoder` 包现有 42 个 Python 文件、7,667 个物理行。扣除空行和纯注释行后为 6,754 行。自最初快照以来增加了计划模式、hooks、检查点、请求预算、工具校验、用量账本和只读团队。
 
 它真能跑：读写文件、执行 shell、派子 agent、按请求预算归档并压缩上下文，还能随时把这趟烧掉的 token 和美元数报给你。任何要动你磁盘、要跑命令的调用，都会先停下来等你点头，回归测试覆盖了这些行为。但能跑不是为了劝你拿去日用，而是为了让这份「注释」不撒谎：一个解释 agent 怎么运作的范例，自己得真能运作。
 
@@ -95,33 +94,34 @@ Windows 在项目根目录运行 `.\start-web.ps1`，浏览器访问 <http://127
 
 ```
 corecoder/
-├── agent.py        agent 主循环 + 并行工具执行       424 行   ← 从这里开始读
-├── llm.py          流式客户端 + 重试 + 成本统计       480 行
-├── context.py      请求预算与证据压缩                     579 行
-├── session.py      校验与原子存档 / 续聊              148 行
-├── state.py        会话状态与执行证据                    114 行
-├── permissions.py  改动类工具的用户授权                75 行
-├── hooks.py        工具调用前后的用户 shell 钩子        94 行
-├── shell.py        POSIX shell 路由（Windows 走 Git Bash） 61 行
-├── mcp.py          MCP stdio 客户端与分页发现          288 行
-├── prompt.py       系统提示词                          50 行
-├── cli.py          REPL + 斜杠命令 + 一次性模式        513 行
-├── results.py      结构化运行结果与退出码               36 行
-├── usage.py        不可变请求用量账本                   190 行
-├── validation.py   配置与会话校验                       158 行
-├── config.py       环境变量配置                        55 行
-├── checkpoints.py  /undo 快照与回滚                      384 行
-├── demo.py         离线端到端演示                       101 行
+├── team.py         依赖调度与停止协调
+├── agent.py        agent 主循环 + 并行工具执行   ← 从这里开始读
+├── llm.py          流式客户端 + 重试 + 成本统计
+├── context.py      请求预算与证据压缩
+├── session.py      校验与原子存档 / 续聊
+├── state.py        会话状态与执行证据
+├── permissions.py  改动类工具的用户授权
+├── hooks.py        工具调用前后的用户 shell 钩子
+├── shell.py        POSIX shell 路由（Windows 走 Git Bash）
+├── mcp.py          MCP stdio 客户端与分页发现
+├── prompt.py       系统提示词
+├── cli.py          REPL + 斜杠命令 + 一次性模式
+├── results.py      结构化运行结果与退出码
+├── usage.py        不可变请求用量账本
+├── validation.py   配置与会话校验
+├── config.py       环境变量配置
+├── checkpoints.py  /undo 快照与回滚
+├── demo.py         离线端到端演示
 └── tools/
-    ├── bash.py       shell + 危险命令闸 + cd 追踪      238 行
-    ├── edit.py       唯一匹配搜索替换 + diff            132 行
-    ├── grep.py       内容搜索                           100 行
-    ├── glob_tool.py  文件名匹配                         58 行
-    ├── read.py       文件读取                           74 行
-    ├── write.py      文件写入                           82 行
-    ├── todo.py       agent 自维护的任务清单             91 行
-    ├── agent.py      子 agent 派生                      98 行
-    └── base.py       工具校验与结果                      77 行
+    ├── bash.py       shell + 危险命令闸 + cd 追踪
+    ├── edit.py       唯一匹配搜索替换 + diff
+    ├── grep.py       内容搜索
+    ├── glob_tool.py  文件名匹配
+    ├── read.py       文件读取
+    ├── write.py      文件写入
+    ├── todo.py       agent 自维护的任务清单
+    ├── agent.py      子 agent 派生
+    └── base.py       工具校验与结果
 examples/
 └── plan_hooks_demo.py  离线 plan mode + hooks 演示（免 API key）
 ```
@@ -155,7 +155,15 @@ def chat(self, user_input):
 
 **每次模型请求都先检查完整上下文预算。** 计量包括系统提示、工具 schema、历史、余量和配置的输出上限。长工具结果与旧历史先归档再压缩，预览保留路径和 hash，之后仍能回读证据。预算仍不满足或归档失败时，agent 会明确报错并保留原历史；摘要同时保留工具参数和实际执行状态。
 
-**约束子 agent 能干什么，靠的是不给它那把工具，而不是写一堆规则求它听话。** 派出去的子 agent 拿到的是隔离的上下文、自己独立的一份历史，工具集只比父 agent 少一样：`agent` 工具本身，于是它没法再往下递归派子 agent。少给一件工具，比事后立一条规矩干净得多。它还复用父 agent 同一个模型连接（花销一并算进总账），输出一过 5000 字就截短、只留开头一段，轮次上限也压得比父 agent 更短。同一套克制，从头贯到尾。
+`agent` 工具支持原有单任务，也支持最多八个具名团队任务。团队成员拥有隔离状态，只使用可信的只读工具，同时最多运行四项；可选依赖决定调度顺序。完整输出保存为受管产物，父 agent 收到有长度限制的摘要和证据引用；团队共享本次运行的预算和用量账本。
+
+例如模型可以用以下参数调用 `agent`：
+
+```json
+{"tasks":[{"name":"inspect","task":"检查解析器"},{"name":"review","task":"审查检查结果","depends_on":["inspect"]}]}
+```
+
+计划模式在正常授权后允许这种只读团队调用；聊天模式不提供工具。
 
 每一个「为什么」，下面的文章系列都拆到了具体代码行。
 
@@ -177,7 +185,7 @@ def chat(self, user_input):
 
 读懂之后，最自然的下一步就是 fork。起手不用伤筋动骨：
 
-- **换个你常用的模型。** 就是上面那两个环境变量，`llm.py`（574 行）是所有 provider 适配的入口。
+- **换个你常用的模型。** 就是上面那两个环境变量，`llm.py`（612 行）是所有 provider 适配的入口。
 - **加一件你自己的工具。** 照 `tools/base.py`（78 行）的工具基类写个新文件，跑测试、抓网页、调 LSP 都行，第二篇文章末尾手把手带你写第一个。
 - **改系统提示词。** `prompt.py` 才 50 行，改一句就能看到 agent 的脾气变了，是门槛最低的「改一处就有反馈」。
 - **直接当库 import。** 顶层导出了 `Agent`、`LLM`、`Config`，能嵌进你自己的程序：
@@ -234,7 +242,7 @@ quit / exit      退出（Ctrl+C 取消当前回合）
 
 ## 计划模式
 
-REPL 里 `/plan` 开关计划模式。开着的时候，提示符变成 `(plan)`，一切改动类调用（写文件、编辑、bash、MCP 工具、子 agent）当场被拒：拒绝理由作为普通工具结果回给模型，让它用只读工具继续摸底，给出一份编号计划。计划看着没问题，敲 `approve`（或再敲一次 `/plan`）就把执行权交回去，agent 接着干活。机制上就是 `Agent` 身上的一个开关，加授权闸前面多出来的一支拒绝分支，授权闸本身一行没动；不落盘计划文件，会话之间也不记任何东西。
+REPL 里 `/plan` 开关计划模式。开着时拒绝写文件、编辑、bash、MCP 和旧单任务委派；只读团队仍须经过已有授权。计划看着没问题，敲 `approve`（或再敲一次 `/plan`）恢复执行。
 
 ## 钩子
 

@@ -1,5 +1,9 @@
 """Consent gating for mutating tools: the Permission layer and its wiring."""
 
+import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 from corecoder import Agent
 from corecoder.demo import ScriptedLLM
 from corecoder.llm import LLMResponse, ToolCall
@@ -120,6 +124,22 @@ def test_always_allow_persists_across_instances(tmp_path):
     assert second.check("bash", {}) is None        # the grant survived
     assert second.check("edit_file", {}) is not None  # but only that tool
     assert asked == ["bash"]
+
+
+def test_concurrent_always_grant_is_asked_and_persisted_once(tmp_path):
+    store = tmp_path / "permissions.json"
+    start = threading.Barrier(8)
+    asked = []
+    permission = Permission(ask=lambda name, args: asked.append(name) or "always", persist_path=store)
+
+    def check():
+        start.wait()
+        return permission.check("bash", {})
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        assert list(pool.map(lambda _: check(), range(8))) == [None] * 8
+    assert asked == ["bash"]
+    assert json.loads(store.read_text(encoding="utf-8")) == {"always": ["bash"]}
 
 
 def test_corrupt_permissions_store_is_ignored(tmp_path):

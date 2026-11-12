@@ -411,6 +411,7 @@ export default function App() {
   const [streamText, setStreamText] = useState("");
   const [reasoning, setReasoning] = useState("");
   const [liveTools, setLiveTools] = useState<ToolEvent[]>([]);
+  const [teamTasks, setTeamTasks] = useState<Record<string, ToolEvent>>({});
   const [budgetRequests, setBudgetRequests] = useState("");
   const [budgetTokens, setBudgetTokens] = useState("");
   const [budgetCost, setBudgetCost] = useState("");
@@ -448,14 +449,22 @@ export default function App() {
 
   useEffect(() => {
     const rid = session?.run_id;
-    if (!rid) { setBudgetView(null); return; }
+    const sid = session?.id;
+    setTeamTasks({});
+    if (!rid || !sid) { setBudgetView(null); return; }
     let active = true;
     let timer: number | undefined;
     setBudgetView(null);
     const refresh = async () => {
       try {
-        const run = await api<{ budget?: BudgetSnapshot; status?: string }>(`run?id=${encodeURIComponent(rid)}`);
-        if (!active) return;
+        const run = await api<{ budget?: BudgetSnapshot; status?: string; team_tasks?: Record<string, ToolEvent> }>(`run?id=${encodeURIComponent(rid)}`);
+        if (!active || sessionRef.current?.id !== sid || sessionRef.current?.run_id !== rid) return;
+        setTeamTasks((current) => {
+          const merged = { ...current };
+          for (const [id, task] of Object.entries(run.team_tasks || {}))
+            if (!merged[id] || (task.seq || 0) > (merged[id].seq || 0)) merged[id] = task;
+          return merged;
+        });
         setBudgetView(run.budget ?? null);
         if (run.status && !["completed", "failed", "cancelled", "interrupted"].includes(run.status))
           timer = window.setTimeout(refresh, 1500);
@@ -535,6 +544,7 @@ export default function App() {
       setStreamText("");
       setReasoning("");
       setLiveTools([]);
+      setTeamTasks({});
       await refreshList();
       if (window.innerWidth < 700) setSidebar(false);
       textarea.current?.focus();
@@ -676,6 +686,7 @@ export default function App() {
     void followRun(rid, (event) => {
       if (!isCurrentRun()) return;
       if (event.type === "reset") {
+        setTeamTasks(event.team_tasks || {});
         checkOutputGeneration.current++;
         setCheckOutput(null);
         const terminal = ["completed", "cancelled", "failed", "interrupted"].includes(event.status || "");
@@ -694,6 +705,11 @@ export default function App() {
       }
       if (event.type === "token") setStreamText((text) => text + (event.text || ""));
       if (event.type === "reasoning") setReasoning((text) => text + (event.text || ""));
+      if (event.type === "team_task" && event.task_id) {
+        const taskId = event.task_id;
+        setTeamTasks((tasks) => !tasks[taskId] || (event.seq || 0) > (tasks[taskId].seq || 0)
+          ? { ...tasks, [taskId]: event } : tasks);
+      }
       if (["tool_start", "tool_output", "tool_result"].includes(event.type)) setLiveTools((events) => [...events, event]);
       if (event.type === "check_result") { setCheckEvents((events) => [...events, event]); checkOutputGeneration.current++; setCheckOutput(null); }
       if (event.type === "check_output" && event.id) {
@@ -1421,6 +1437,19 @@ export default function App() {
                 </article>
               )}
               {!busy && runResult && <RunResultBanner result={runResult} />}
+              {Object.keys(teamTasks).length > 0 && (
+                <section className="team-tasks" aria-label="团队任务">
+                  <strong>团队任务</strong>
+                  {Object.values(teamTasks).map((task) => (
+                    <div key={task.task_id}>
+                      <strong>{task.name}</strong> · {task.status}
+                      {!!task.depends_on?.length && <span> · 依赖：{task.depends_on.join("、")}</span>}
+                      {task.reason && <span> · {task.reason}</span>}
+                      {task.summary && <p>{task.summary}</p>}
+                    </div>
+                  ))}
+                </section>
+              )}
 
               <div ref={bottom} />
             </div>

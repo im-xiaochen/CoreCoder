@@ -12,6 +12,7 @@ single unified interface. Set CORECODER_PROVIDER=litellm.
 import contextvars
 import json
 import math
+import re
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -55,12 +56,17 @@ class LLMResponse:
     tool_calls: list[ToolCall] = field(default_factory=list)
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    reasoning_content: str = ""
+    reasoning_source: dict | None = None
 
     @property
     def message(self) -> dict:
         """Convert to OpenAI message format for appending to history."""
         msg: dict = {"role": "assistant", "content": self.content if self.content or not self.tool_calls else None}
         if self.tool_calls:
+            if self.reasoning_content and self.reasoning_source:
+                msg["reasoning_content"] = self.reasoning_content
+                msg["_reasoning_source"] = self.reasoning_source.copy()
             msg["tool_calls"] = [
                 {
                     "id": tc.id,
@@ -179,7 +185,10 @@ def _adapt_rejected_param(params: dict, exc: BadRequestError) -> bool:
     if "'max_tokens'" in message and "max_tokens" in params:
         params["max_completion_tokens"] = params.pop("max_tokens")
         return True
-    if "'temperature'" in message and "temperature" in params:
+    temperature_rejected = ("'temperature'" in message or bool(re.search(
+        r"(?:unsupported|invalid|unrecognized|unknown|not supported)\s+(?:parameter\s*:?\s*)?temperature\b"
+        r"|\btemperature\s+(?:is\s+)?(?:unsupported|invalid|not supported|must|only)\b", message)))
+    if temperature_rejected and "temperature" in params:
         params.pop("temperature")
         return True
     return False
@@ -199,6 +208,8 @@ class LLM:
     ):
         self.model = model
         self.client = OpenAI(api_key=api_key, base_url=base_url)
+        actual_url = getattr(self.client, "base_url", None)
+        self._protocol_endpoint = _safe_endpoint(str(actual_url)) if actual_url else None
         # Keep the provider's actual completion cap explicit so request
         # budgeting can reserve exactly what this client sends.
         if "max_tokens" not in kwargs and "max_completion_tokens" not in kwargs:
@@ -306,6 +317,21 @@ class LLM:
         )
         self._record_usage(context, "legacy", int(prompt_tokens), int(completion_tokens), True)
 
+    def project_messages(self, messages, context=None):
+        """Return the provider-visible history without changing canonical messages."""
+        source = {"provider": context.provider if context else self.provider,
+                  "endpoint": getattr(self, "_protocol_endpoint", None),
+                  "model": context.model if context else self.model}
+        projected = []
+        for message in messages:
+            item = dict(message)
+            prior_source = item.pop("_reasoning_source", None)
+            if (not source["endpoint"] or prior_source != source or item.get("role") != "assistant"
+                    or not item.get("tool_calls")):
+                item.pop("reasoning_content", None)
+            projected.append(item)
+        return projected
+
     def chat(
         self,
         messages: list[dict],
@@ -317,15 +343,16 @@ class LLM:
 
         on_reasoning, when given, receives reasoning_content deltas from
         thinking models (deepseek-reasoner, kimi-k2-thinking, ...). Reasoning
-        is display-only: it never enters the history, since providers reject
-        it when sent back.
+        is displayed as it arrives. Provider reasoning_content is retained
+        for tool-call history and returned only to its original provider endpoint and model.
         """
         context = self._request_context()
         scope_token = _REQUEST_SCOPE.set(context)
         attempt_token = _ATTEMPT_SCOPE.set(None)
+        projected = self.project_messages(messages, context)
         params: dict = {
             "model": context.model,
-            "messages": messages,
+            "messages": projected,
             "stream": True,
             **self.extra,
         }
@@ -382,6 +409,7 @@ class LLM:
         context = _context or self._request_context()
         attempt_id = _attempt_id or f"{context.request_id}:1"
         content_parts: list[str] = []
+        reasoning_parts: list[str] = []
         tc_map: dict[int, dict] = {}  # index -> {id, name, arguments_str}
         prompt_tok = completion_tok = 0
         usage_seen = False
@@ -411,7 +439,10 @@ class LLM:
                 # it when someone is listening, but never mix it into the reply.
                 # reasoning_content is the DeepSeek/Kimi dialect, reasoning is
                 # what aggregators like OpenRouter normalize it to
-                reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
+                reasoning_content = getattr(delta, "reasoning_content", None)
+                if reasoning_content:
+                    reasoning_parts.append(reasoning_content)
+                reasoning = reasoning_content or getattr(delta, "reasoning", None)
                 if reasoning and on_reasoning:
                     on_reasoning(reasoning)
 
@@ -453,6 +484,9 @@ class LLM:
                 tool_calls=parsed,
                 prompt_tokens=prompt_tok,
                 completion_tokens=completion_tok,
+                reasoning_content="".join(reasoning_parts) if parsed else "",
+                reasoning_source={"provider": context.provider, "endpoint": getattr(self, "_protocol_endpoint", None),
+                                  "model": context.model} if parsed and getattr(self, "_protocol_endpoint", None) else None,
             )
         finally:
             self._record_usage(context, attempt_id, prompt_tok, completion_tok, usage_seen,
@@ -464,10 +498,12 @@ class LLM:
     def _call_with_retry(self, params: dict, max_retries: int = 3):
         """Retry on transient errors with exponential backoff."""
         for attempt in range(max_retries):
+            from .team import check_team_stop, in_team
+            check_team_stop()
             context = _REQUEST_SCOPE.get()
             budget = _BUDGET_SCOPE.get()
             attempt_id = f"{context.request_id}:create:{uuid4().hex}" if context else uuid4().hex
-            client = self.client.with_options(max_retries=0) if budget is not None else self.client
+            client = self.client.with_options(max_retries=0) if budget is not None or in_team() else self.client
             create = client.chat.completions.create
             if not callable(create):
                 raise TypeError("Provider cannot disable implicit retries")
@@ -559,6 +595,8 @@ class LiteLLM(LLM):
             params["api_base"] = self.base_url
 
         for attempt in range(max_retries):
+            from .team import check_team_stop
+            check_team_stop()
             try:
                 return litellm.completion(**params)
             except Exception as e:

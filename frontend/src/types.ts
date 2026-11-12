@@ -48,6 +48,12 @@ export interface ToolEvent {
   }[];
   at?: number;
   session?: Session;
+  team_id?: string;
+  task_id?: string;
+  depends_on?: string[];
+  reason?: string;
+  summary?: string;
+  team_tasks?: Record<string, ToolEvent>;
 }
 export interface Message {
   role: "user" | "assistant" | "tool" | "system";

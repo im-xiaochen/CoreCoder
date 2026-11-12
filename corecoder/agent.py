@@ -228,6 +228,8 @@ class Agent:
             return ToolOutcome(tc.id, name, "failed", f"Error: {exc}", "execute")
 
     def _run_turn(self, on_token=None, on_tool=None, on_reasoning=None):
+        from .team import check_team_stop
+        check_team_stop()
         system = self._full_messages()[0]["content"]
         prepared = self.context.prepare_request(
             self.messages,
@@ -389,7 +391,13 @@ class Agent:
             self._invoke(self.hooks.run_post, tc.name, tc.arguments, result, cwd=self.state.cwd)
 
     def _permit(self, tc):
-        if self.plan_mode and tc.name not in Permission.READ_ONLY:
+        from .tools.agent import AgentTool
+        tool = self._tool_by_name.get(tc.name)
+        from sys import modules
+        browser_type = getattr(modules.get("web_backend.service"), "BrowserAgentTool", None)
+        delegated = (type(tool) in (AgentTool, browser_type) and
+                     tc.name == "agent" and "tasks" in tc.arguments and "task" not in tc.arguments)
+        if self.plan_mode and tc.name not in Permission.READ_ONLY and not delegated:
             return (
                 "Plan mode is on, so this call was refused: plan mode is read-only. "
                 "Do not retry it. Type approve or /plan to resume execution."

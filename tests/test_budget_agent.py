@@ -133,7 +133,7 @@ def test_browser_subagent_budget_stops_later_batch_write(tmp_path, monkeypatch):
     class Child:
         def __init__(self, *args, **kwargs):
             pass
-        def chat(self, task):
+        def chat_result(self, task):
             (tmp_path / "child.txt").write_text("done")
             raise BudgetExceeded("limit")
 

@@ -107,7 +107,8 @@ def make_handler(service: Service, frontend: Path):
                                 session = service.get(view['session_id'])
                                 events = [{'type': 'reset', 'run_id': rid, 'seq': view['last_seq'],
                                            'session': session.snapshot(), 'text': view['text'],
-                                           'reasoning': view['reasoning'], 'status': view['status']}]
+                                           'reasoning': view['reasoning'], 'status': view['status'],
+                                           'team_tasks': view.get('team_tasks', {})}]
                             for event in events:
                                 payload = f"id: {event['seq']}\ndata: " + json.dumps(event, ensure_ascii=False) + "\n\n"
                                 self.wfile.write(payload.encode('utf-8'))

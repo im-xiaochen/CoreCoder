@@ -239,16 +239,21 @@ class ContextManager:
         return str(path.absolute()).replace("\\", "/"), digest
 
     def prepare_request(self, messages, *, system="", tools=None, output_reserve=0, artifact_dir=None, llm=None):
+        project = getattr(llm, "project_messages", None)
+
+        def estimate(items, **kwargs):
+            return self._estimate(project(items) if callable(project) else items, **kwargs)
+
         original = copy.deepcopy(messages)
         candidate = copy.deepcopy(messages)
         limit = self.max_tokens
         artifacts = []
         changed = False
-        current = self._estimate(candidate, system=system, tools=tools or [])
-        fixed = self._estimate([], system=system, tools=tools or [])
+        current = estimate(candidate, system=system, tools=tools or [])
+        fixed = estimate([], system=system, tools=tools or [])
         latest = [m for m in candidate if m.get("role") == "user"]
         if fixed + output_reserve > limit or (
-            latest and self._estimate([latest[-1]], system=system, tools=tools or []) + output_reserve > limit
+            latest and estimate([latest[-1]], system=system, tools=tools or []) + output_reserve > limit
         ):
             return CompressionResult(original, False, False, current, output_reserve, limit, reason="context_budget_exceeded")
         if current + output_reserve <= limit:
@@ -285,7 +290,7 @@ class ContextManager:
                 )
         # If output previews are insufficient, replace complete old turns with a
         # derived evidence summary. The newest user turn remains canonical.
-        if self._estimate(candidate, system=system, tools=tools or []) + output_reserve > limit and len(candidate) > 4:
+        if estimate(candidate, system=system, tools=tools or []) + output_reserve > limit and len(candidate) > 4:
             split = self._safe_split(candidate, 4)
             if split > 0:
                 try:
@@ -303,12 +308,12 @@ class ContextManager:
                     {"role": "assistant", "content": "Earlier evidence retained."},
                     *candidate[split:],
                 ]
-                if self._estimate(summarized, system=system, tools=tools or []) < self._estimate(
+                if estimate(summarized, system=system, tools=tools or []) < estimate(
                     candidate, system=system, tools=tools or []
                 ):
                     candidate = summarized
                     changed = True
-        while self._estimate(candidate, system=system, tools=tools or []) + output_reserve > limit:
+        while estimate(candidate, system=system, tools=tools or []) + output_reserve > limit:
             eligible = [m for m in candidate if m.get("artifact_path") and len(m.get("content", "")) > 160]
             if not eligible:
                 break
@@ -325,7 +330,7 @@ class ContextManager:
         for m in candidate:
             m.pop("artifact_path", None)
             m.pop("sha256", None)
-        input_tokens = self._estimate(candidate, system=system, tools=tools or [])
+        input_tokens = estimate(candidate, system=system, tools=tools or [])
         if input_tokens + output_reserve > limit:
             return CompressionResult(
                 original, changed, False, current, output_reserve, limit, artifacts, "context_budget_exceeded"
