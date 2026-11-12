@@ -187,51 +187,26 @@ class BrowserAgent(Agent):
 
 
 class BrowserAgentTool(AgentTool):
-    def execute(self, task: str) -> str:
+    def _team_status(self, event):
+        self._parent_agent.session.emit("team_task", event)
+
+    def _team_cancel(self):
+        self._parent_agent.session.check_cancelled()
+
+    def _child_tools(self, state):
         parent = self._parent_agent
-        if parent is None:
-            return "Error: agent tool not initialized"
-        # Keep the original sub-agent feature, with browser cancellation,
-        # permission events and its own task list at every agent boundary.
-        child_state = parent.state.fork()
-        child_tools = []
+        trusted = (ReadFileTool, GlobTool, WorkspaceGrepTool, RepoMapTool)
+        result = []
         for tool in parent.tools:
-            if tool.name == "agent":
-                continue
-            if isinstance(tool, TodoWriteTool):
-                child_tools.append(TodoWriteTool(state=child_state))
-            elif isinstance(tool, AgentTool):
-                continue
-            else:
-                clone = getattr(tool, "clone_for_state", None)
-                if clone is not None:
-                    child_tools.append(clone(child_state))
-                elif getattr(tool, "stateless", False):
-                    child_tools.append(tool)
-                else:
-                    return f"Sub-agent error: custom tool {tool.name!r} must declare stateless=True or implement clone_for_state(state)"
-        sub = BrowserAgent(
-            parent.session,
-            llm=parent.llm,
-            state=child_state,
-            tools=child_tools,
-            max_context_tokens=parent.context.max_tokens,
-            max_rounds=20,
-            permission=parent.permission,
-            hooks=parent.hooks,
-        )
-        try:
-            result = sub.chat(task)
-            if len(result) > 5000:
-                result = result[:4500] + "\n... (sub-agent output truncated)"
-            return f"[Sub-agent completed]\n{result}"
-        except Exception as exc:
-            from corecoder.budget import BudgetExceeded
-            if isinstance(exc, BudgetExceeded):
-                raise
-            return f"Sub-agent error: {exc}"
-        finally:
-            pass
+            if (type(tool) is ScopedTool and type(tool.tool) in trusted) or type(tool) is TodoWriteTool:
+                result.append(tool.clone_for_state(state))
+        return result
+
+    def _make_child(self, state, tools):
+        parent = self._parent_agent
+        return BrowserAgent(parent.session, llm=parent.llm, state=state, tools=tools,
+                            max_context_tokens=parent.context.max_tokens, max_rounds=20,
+                            permission=parent.permission, hooks=None)
 
 
 class WebSession:

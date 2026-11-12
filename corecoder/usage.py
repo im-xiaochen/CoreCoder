@@ -212,12 +212,13 @@ class RunUsageScope:
         return CostSummary(known, up, uc, unknown, missing)
 
     def as_dict(self) -> dict[str, object]:
-        summary = self.summary()
-        result = summary.as_dict()
-        result["known_cost"] = str(summary.known_cost)
-        result["request_ids"] = sorted(self.request_ids)
-        result["prompt_tokens"] = sum(e.prompt_tokens for e in self._entries if e.request_id in self.request_ids)
-        result["completion_tokens"] = sum(e.completion_tokens for e in self._entries if e.request_id in self.request_ids)
+        with self._lock:
+            summary = self.summary()
+            result = summary.as_dict()
+            result["known_cost"] = str(summary.known_cost)
+            result["request_ids"] = sorted(self.request_ids)
+            result["prompt_tokens"] = sum(e.prompt_tokens for e in self._entries if e.request_id in self.request_ids)
+            result["completion_tokens"] = sum(e.completion_tokens for e in self._entries if e.request_id in self.request_ids)
         return result
 
 

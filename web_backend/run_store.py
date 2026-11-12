@@ -48,9 +48,24 @@ class RunStore:
                     if event['seq'] > saved_seq and event.get('type') in ('token', 'reasoning'):
                         key = 'text' if event['type'] == 'token' else 'reasoning'
                         data[key] = (data.get(key, '') + event.get('text', ''))[-MAX_BYTES // 4:]
+                    if event['seq'] > saved_seq and event.get('type') == 'team_task':
+                        data.setdefault('team_tasks', {})[event['task_id']] = event
+                interrupted_tasks = []
+                for task in data.get('team_tasks', {}).values():
+                    if task.get('status') in ('pending', 'running'):
+                        interrupted_tasks.append({**task, 'status': 'interrupted', 'reason': 'process restarted'})
                 data['events'] = events
                 data['last_seq'] = max(saved_seq, events[-1]['seq'] if events else 0)
                 self.runs[rid] = data
+                for task in interrupted_tasks:
+                    task['seq'] = data['last_seq'] + 1
+                    with journal.open('a', encoding='utf-8') as out:
+                        out.write(json.dumps(task, ensure_ascii=False, separators=(',', ':')) + '\n')
+                    data['events'].append(task)
+                    data['last_seq'] = task['seq']
+                    data['team_tasks'][task['task_id']] = task
+                if interrupted_tasks:
+                    self._save(data)
             except (OSError, ValueError, KeyError, TypeError):
                 continue
 
@@ -96,7 +111,9 @@ class RunStore:
     def append(self, rid, event, guard=None):
         with self.lock:
             run = self.runs[rid]
-            if guard is not None and (not guard.is_set() or run['status'] in {'completed', 'failed', 'cancelled', 'interrupted'}):
+            if (run['status'] in TERMINAL and (guard is not None or event.get('type') == 'team_task')) or (
+                guard is not None and not guard.is_set()
+            ):
                 return None
             entry = {**event, 'run_id': rid, 'seq': run['last_seq'] + 1}
             encoded = json.dumps(entry, ensure_ascii=False, separators=(',', ':')) + '\n'
@@ -107,6 +124,8 @@ class RunStore:
             run['events'].append(entry)
             run['last_seq'] = entry['seq']
             run['updated_at'] = time.time()
+            if event.get('type') == 'team_task':
+                run.setdefault('team_tasks', {})[event['task_id']] = entry
             if event.get('type') in ('token', 'reasoning'):
                 key = 'text' if event['type'] == 'token' else 'reasoning'
                 run[key] = (run[key] + event.get('text', ''))[-MAX_BYTES // 4:]
