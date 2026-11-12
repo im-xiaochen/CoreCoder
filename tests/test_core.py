@@ -400,6 +400,19 @@ def test_sub_agent_cwd_does_not_leak_into_parent(tmp_path, monkeypatch):
     assert parent.state.cwd == tmp_path.resolve()
 
 
+def test_sub_agent_cancellation_propagates(tmp_path, monkeypatch):
+    from corecoder.results import RunResult
+    from corecoder.state import SessionState
+    from corecoder.tools.agent import AgentTool
+
+    parent = Agent(llm=LLM.__new__(LLM), tools=[], state=SessionState(workspace_root=tmp_path))
+    tool = AgentTool()
+    tool._parent_agent = parent
+    monkeypatch.setattr(Agent, "chat_result", lambda self, text: RunResult("cancelled", finish_reason="cancelled"))
+    with pytest.raises(KeyboardInterrupt):
+        tool.execute(task="x")
+
+
 def test_reset_clears_todo_list():
     """/reset must drop the dead conversation's checklist from the system prompt."""
     from corecoder.tools.todo import TodoWriteTool

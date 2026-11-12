@@ -317,6 +317,21 @@ class LLM:
         )
         self._record_usage(context, "legacy", int(prompt_tokens), int(completion_tokens), True)
 
+    def project_messages(self, messages, context=None):
+        """Return the provider-visible history without changing canonical messages."""
+        source = {"provider": context.provider if context else self.provider,
+                  "endpoint": getattr(self, "_protocol_endpoint", None),
+                  "model": context.model if context else self.model}
+        projected = []
+        for message in messages:
+            item = dict(message)
+            prior_source = item.pop("_reasoning_source", None)
+            if (not source["endpoint"] or prior_source != source or item.get("role") != "assistant"
+                    or not item.get("tool_calls")):
+                item.pop("reasoning_content", None)
+            projected.append(item)
+        return projected
+
     def chat(
         self,
         messages: list[dict],
@@ -334,15 +349,7 @@ class LLM:
         context = self._request_context()
         scope_token = _REQUEST_SCOPE.set(context)
         attempt_token = _ATTEMPT_SCOPE.set(None)
-        source = {"provider": context.provider, "endpoint": getattr(self, "_protocol_endpoint", None), "model": context.model}
-        projected = []
-        for message in messages:
-            item = dict(message)
-            prior_source = item.pop("_reasoning_source", None)
-            if (not source["endpoint"] or prior_source != source or item.get("role") != "assistant"
-                    or not item.get("tool_calls")):
-                item.pop("reasoning_content", None)
-            projected.append(item)
+        projected = self.project_messages(messages, context)
         params: dict = {
             "model": context.model,
             "messages": projected,

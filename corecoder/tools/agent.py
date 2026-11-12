@@ -96,6 +96,8 @@ class AgentTool(Tool):
         sub = self._make_child(state, tools)
         sub.hooks = parent.hooks
         result = sub.chat_result(task)
+        if result.status == "cancelled":
+            raise KeyboardInterrupt
         if result.finish_reason == "budget_exceeded":
             raise result.error if isinstance(result.error, BudgetExceeded) else BudgetExceeded("child budget exceeded")
         if result.status == "completed":

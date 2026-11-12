@@ -32,3 +32,21 @@ def test_temperature_unquoted_and_exact_max_token():
     assert _adapt_rejected_param(params, error) and "temperature" not in params
     error = BadRequestError("unsupported 'max_completion_tokens'", response=response, body=None)
     assert not _adapt_rejected_param(params, error) and params["max_tokens"] == 10
+
+
+def test_context_budget_uses_wire_projection_without_changing_history(tmp_path):
+    from corecoder.context import ContextManager
+
+    model = LLM("model-a", "fake")
+    source = {"provider": model.provider, "endpoint": model._protocol_endpoint, "model": model.model}
+    history = [{"role": "assistant", "content": None, "tool_calls": [{"id": "x"}],
+                "reasoning_content": "x" * 20000, "_reasoning_source": source},
+               {"role": "tool", "tool_call_id": "x", "content": "ok"},
+               {"role": "user", "content": "continue"}]
+    context = ContextManager(max_tokens=2000)
+    assert not context.prepare_request(history, llm=model, artifact_dir=tmp_path).budget_ok
+    model.model = "model-b"
+    prepared = context.prepare_request(history, llm=model, artifact_dir=tmp_path)
+    assert prepared.budget_ok and not prepared.changed
+    assert prepared.messages == history
+    assert history[0]["reasoning_content"] == "x" * 20000

@@ -333,7 +333,12 @@ def test_real_child_non_success_status_is_not_claimed_completed(tmp_path, monkey
                        if m["role"] == "tool" and m.get("tool_call_id") == "team-parent")
         if legacy:
             assert "completed" not in message.lower()
-            assert terminal in message.lower() or terminal.replace("_", " ") in message.lower()
+            if terminal == "cancelled":
+                assert result.status == result.finish_reason == "cancelled"
+                assert len(calls) == 2
+                assert "interrupted" in message.lower() and "unknown" in message.lower()
+            else:
+                assert terminal in message.lower() or terminal.replace("_", " ") in message.lower()
         else:
             member = json.loads(message)["tasks"][0]
             assert member["status"] == terminal and member["reason"] == terminal

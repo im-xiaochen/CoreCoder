@@ -2,14 +2,14 @@
 
 # CoreCoder
 
-**The nanoGPT of coding agents. A 2,561-line engine inside 6,743 lines of Python: understand how a coding agent actually works, then fork your own.**
+**The nanoGPT of coding agents. A 2,572-line engine inside 6,754 lines of Python: understand how a coding agent actually works, then fork your own.**
 
 *learn from it · fork it · ship something better*
 
 [中文](README_CN.md) | English | [Source-reading series · 8 bilingual essays](article/00-index_EN.md)
 
 [![PyPI](https://img.shields.io/pypi/v/corecoder)](https://pypi.org/project/corecoder/)
-[![Engine](https://img.shields.io/badge/engine-2561_LoC-blue)](corecoder)
+[![Engine](https://img.shields.io/badge/engine-2572_LoC-blue)](corecoder)
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
@@ -25,7 +25,7 @@
 
 | | CoreCoder | Claude Code | aider | nanoGPT |
 |---|---|---|---|---|
-| Lines of code | 2,561 engine / 6,743 total (7,653 physical) | hundreds of thousands (closed) | tens of thousands of Python | ~600 (two files) |
+| Lines of code | 2,572 engine / 6,754 total (7,667 physical) | hundreds of thousands (closed) | tens of thousands of Python | ~600 (two files) |
 | Time to read it all | one afternoon | can't (closed) | a few days of slogging | one afternoon |
 | Breakpoint, change, rerun? | yes, every line | no | yes, but there's a lot | yes |
 | What it's for | understand one, then fork your own | production coding assistant | terminal pair-programming | minimal GPT for teaching |
@@ -36,7 +36,7 @@ The nanoGPT column is there as a reference point: minimal, readable, but it teac
 
 I've always felt coding agents get talked about as if they were arcane. Strip a tool like Claude Code or Cursor all the way down and the core is a `while` loop wrapped around a large model, plus seven or eight tools that let it actually do things. The hard part was never the loop; it's everything the loop has to cope with once it meets the real world. CoreCoder is the minimal version that writes that core out honestly.
 
-The `corecoder` package contains 42 files and 7,653 physical lines (6,743 net, excluding comment-only and blank lines). The growth since the original snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation, usage accounting and read-only teams.
+The `corecoder` package contains 42 files and 7,667 physical lines (6,754 net, excluding comment-only and blank lines). The growth since the original snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation, usage accounting and read-only teams.
 
 And it really runs: reads and writes files, executes shell, spawns sub-agents, budgets requests and archives context, and tells you the tokens and dollars a run burned whenever you ask. Anything that would mutate your disk or run a command stops for your consent first. The regression suite checks these behaviors. But the point of it running isn't to become your daily driver. It runs so the walkthrough can't lie: a reference that shows how an agent works has to actually work.
 
@@ -178,7 +178,7 @@ I also wrote a bilingual source-reading series, one intro plus eight parts, each
 
 Once you understand it, the natural next step is to fork. Getting started doesn't take much:
 
-- **Swap in a model you actually use.** It's the two env vars from above; `llm.py` (518 lines) is the entry point for all provider adaptation.
+- **Swap in a model you actually use.** It's the two env vars from above; `llm.py` (612 lines) is the entry point for all provider adaptation.
 - **Add a tool of your own.** Write a new file against the tool base class in `tools/base.py` (77 lines): run tests, fetch a page, call an LSP, whatever. The end of the second essay walks you through your first one by hand.
 - **Rewrite the system prompt.** `prompt.py` is all of 50 lines; change one line and you'll watch the agent's temperament shift. It's the cheapest "change one thing, see a result" in the whole project.
 - **Import it as a library.** The top level exports `Agent`, `LLM`, and `Config`, ready to embed in your own program:
