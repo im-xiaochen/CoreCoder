@@ -379,27 +379,25 @@ def test_parallel_edits_to_one_file_both_land(tmp_path):
 def test_sub_agent_cwd_does_not_leak_into_parent(tmp_path, monkeypatch):
     """A sub-agent's own cd must not move the parent's tracked cwd."""
     from corecoder.agent import Agent as CoreAgent
+    from corecoder.results import RunResult
+    from corecoder.state import SessionState
     from corecoder.tools.agent import AgentTool
-    from corecoder.tools.bash import get_tracked_cwd, set_tracked_cwd
 
-    parent = Agent(llm=LLM.__new__(LLM), tools=[])
+    state = SessionState(workspace_root=tmp_path, cwd=tmp_path)
+    parent = Agent(llm=LLM.__new__(LLM), tools=[], state=state)
     tool = AgentTool()
     tool._parent_agent = parent
     target = tmp_path / "sub"
     target.mkdir()
 
-    def fake_chat(self, text, **kwargs):
-        set_tracked_cwd(str(target))  # the sub-agent cd's somewhere else
-        return "done"
+    def fake_chat_result(self, text, **kwargs):
+        assert self.state.cwd == tmp_path.resolve()
+        self.state.cwd = target.resolve()
+        return RunResult("completed", text="done")
 
-    monkeypatch.setattr(CoreAgent, "chat", fake_chat)
-    prev = get_tracked_cwd()
-    set_tracked_cwd(str(tmp_path))
-    try:
-        assert tool.execute(task="x") == "[Sub-agent completed]\ndone"
-        assert get_tracked_cwd() == str(tmp_path)
-    finally:
-        set_tracked_cwd(prev)
+    monkeypatch.setattr(CoreAgent, "chat_result", fake_chat_result)
+    assert tool.execute(task="x") == "[Sub-agent completed]\ndone"
+    assert parent.state.cwd == tmp_path.resolve()
 
 
 def test_reset_clears_todo_list():

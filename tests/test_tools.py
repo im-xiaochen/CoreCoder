@@ -20,7 +20,11 @@ def test_all_tools_have_valid_schema():
         params = s["function"]["parameters"]
         assert params["type"] == "object"
         assert "properties" in params
-        assert "required" in params
+        if s["function"]["name"] == "agent":
+            assert params["oneOf"] == [{"required": ["task"]}, {"required": ["tasks"]}]
+            assert {"task", "tasks"} <= params["properties"].keys()
+        else:
+            assert "required" in params
 
 
 # --- bash ---
