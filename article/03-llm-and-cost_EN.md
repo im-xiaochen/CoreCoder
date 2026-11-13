@@ -54,7 +54,7 @@ Cost limits use USD. A zero limit prohibits that resource and an omitted limit l
 
 ## Where config comes from
 
-Finally, a thread through `config.py` (55 lines). It reads config from environment variables with a sensible priority:
+Finally, a thread through `config.py` (60 lines). It reads config from environment variables with a sensible priority:
 
 ```python
 api_key = (
