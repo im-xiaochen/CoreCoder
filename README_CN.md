@@ -6,12 +6,12 @@
 
 *learn from it · fork it · ship something better*
 
-中文 | [English](README.md) | [配套源码导读 · 八篇双语](article/)
+中文 | [English](README.md) | [配套源码导读 · 九篇双语](article/00-index.md)
 
 [![PyPI](https://img.shields.io/pypi/v/corecoder)](https://pypi.org/project/corecoder/)
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
+[![Tests](https://github.com/im-xiaochen/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/im-xiaochen/CoreCoder/actions)
 [![源码导读](https://img.shields.io/badge/源码导读-8篇双语-orange)](article/)
 
 </div>
@@ -48,14 +48,14 @@ nanoGPT 那一列是拿来对照的：它最小、可读，但教的是训一个
 
 <p align="center"><sub><i>这一千行真能跑通一个完整回合：让它修 buggy.py，它自己读文件、改代码、跑一遍确认、再给结论。看完就回来读代码。</i></sub></p>
 
-这份 README 也就按这条线铺开：上半带你**读懂**（代码地图、主循环、八篇导读），下半带你 **fork** 它、再指几个能往更好里做的方向。
+这份 README 也就按这条线铺开：上半带你**读懂**（代码地图、主循环、九篇导读），下半带你 **fork** 它、再指几个能往更好里做的方向。
 
 ## 先跑一次（读之前的五分钟）
 
 读源码之前，先让它在你机器上活一次，建立点体感。它是个拿来 fork 的地基，所以推荐直接 clone 下来、可编辑安装，边读边改：
 
 ```bash
-git clone https://github.com/he-yufeng/CoreCoder
+git clone https://github.com/im-xiaochen/CoreCoder
 cd CoreCoder
 pip install -e .
 ```
@@ -167,19 +167,20 @@ def chat(self, user_input):
 
 每一个「为什么」，下面的文章系列都拆到了具体代码行。
 
-## 配套源码导读 · 八篇双语
+## 配套源码导读 · 九篇双语
 
-我还写了一套双语源码导读，一篇导言加八篇正文，每篇都配英文镜像（`_EN.md`）。它对着 CoreCoder 的真实代码，讲 Claude Code 这类 agent 的内部构造。有一条给自己立的硬规矩：每一处行数、每一段代码都从仓库里现读现核，绝不凭印象编。前六篇带你读懂，第七篇带你 fork，第八篇讲怎么不动主循环地扩展它，哪篇先读都行。
+双语源码导读包含一篇导言和九章正文。可以顺着 CoreCoder 的源码读主循环、工具和会话，也可以直接动手加一个工具，或从 Git 审阅一路走到验证。每章都链接到对应实现。
 
 - **[导言 · 用 CoreCoder 读懂 Claude Code，再造一个你自己的](article/00-index.md)**
 - **[01 一个 agent 的本体，是一个 while 循环](article/01-the-loop.md)** — `agent.py` 的主循环、打断与轮次上限
 - **[02 工具系统：让模型安全地动手](article/02-tools.md)** — `tools/` 九个工具与 bash 安全闸
 - **[03 接入任意大模型，顺便把账算清楚](article/03-llm-and-cost.md)** — `llm.py` 的 provider 包装、重试与成本统计
 - **[04 用有限的窗口扛住一个长任务](article/04-context.md)** — `context.py` 的三层压缩与孤儿 tool 消息
-- **[05 并行执行与子 agent](article/05-parallel-and-subagents.md)** — 线程池并发与子 agent 隔离
-- **[06 把它跑成一个真正的命令行工具](article/06-session-and-cli.md)** — `session.py` 与路径穿越防护
+- **[05 并行执行与子 agent](article/05-parallel-and-subagents.md)** — 只读团队、任务依赖与子 agent 隔离
+- **[06 把它跑成一个真正的命令行工具](article/06-session-and-cli.md)** — 会话保存、CLI 结构化结果和 Web 断线重连
 - **[07 Fork CoreCoder，搭一个你自己的 coding agent](article/07-build-your-own.md)** — 从 fork 到加自定义工具到换模型
-- **[08 不动主循环的三种加法：MCP、钩子与计划模式](article/08-extensibility.md)** — v0.6.0 扩展三件套，以及让它们成立的那条契约
+- **[08 不动主循环的三种加法：MCP、钩子与计划模式](article/08-extensibility.md)** — stdio MCP、钩子、会话模式与项目技能
+- **[09 从改代码到交付](article/09-review-and-verify.md)** — Git 审阅、项目检查与离线评测
 
 ## Fork 它，造个更好的
 
@@ -197,14 +198,14 @@ llm = LLM(model="deepseek-chat", api_key="sk-...", base_url="https://api.deepsee
 print(Agent(llm=llm).chat("找出项目里所有 TODO 注释并列出来"))
 ```
 
-往深里做，方向也都摆在明处。下面这些 CoreCoder 都没做，是设计取舍，不是没做完；换个角度，每一条都是你能接着往下做、把它推向更强的入口：
+基于现有实现，还可以沿这些方向继续扩展：
 
 - **bash 的危险命令拦截只是正则黑名单。** 防手滑，不是安全沙箱。要面对不可信输入，就得上 seccomp 或容器隔离。这条最硬，要一路走到系统调用和隔离那一层。
-- **重试只做了指数退避。** 没有 fallback 模型，也没有美元硬预算。顺着 `llm.py` 往下，加一条 fallback 模型链和超预算自动停的闸，改动基本就集中在这一个文件。
-- **子 agent 只有最朴素的同步执行。** 做成异步或流式执行器，正好补上第五篇点名的、相对生产级 agent 流式执行的那段差距。
-- **不做 RAG，MCP 客户端也只讲工具这一小片。** 给大仓加检索式代码定位还空着，`mcp.py` 也特意没实现 resources 和 prompts。随便挑一个，都是从最小核心往你自己的更强 agent 扩的真实方向。
+- **模型回退。** CoreCoder 已支持对适用的请求重试和按次运行设预算。跨服务商回退还需要继承预算，并让用户看清每次请求发往哪个端点。
+- **隔离编辑团队。** 团队入口已经支持只读并行。要让成员各自编辑，需要独立工作区，并能审阅彼此冲突的改动。
+- **MCP 资源和提示词。** 现有 stdio 客户端能发现和调用工具，接入 resources 和 prompts 可扩大会话获取信息的方式。
 
-README 只给方向，每条的代码细节第七篇接着讲。挑一个动手，就是把它做得更好的开始。
+想先从一个小改动入手，可以跟着第七篇注册并测试一个本地工具。
 
 ## 命令
 
@@ -318,6 +319,8 @@ REPL 里 `/plan` 开关计划模式。开着时拒绝写文件、编辑、bash�
 项目规则：编程与计划模式按工作区根目录至当前目录的顺序加载 `AGENTS.md`，并限制文件大小；聊天模式不发现或读取项目规则。CLI 使用 `/rules`，网页在工作区面板查看来源和跳过原因。
 
 ## Git 审阅、项目检查与离线评测
+
+[改动审阅实操](article/09-review-and-verify.md)串起了这些功能在 Web 工作台、CLI 和源码中的入口。
 
 在 Git 工作区面板按需查看 HEAD 到索引、索引到工作树的差异，选择路径并明确确认暂存或提交。审阅后内容变化会要求重新审阅；任务期间的变化也可能来自外部编辑。
 
