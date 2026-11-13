@@ -54,7 +54,7 @@ corecoder -p "概括本项目的工具注册方式" --json --budget-requests 5 -
 
 ## 配置从哪来
 
-最后串一下 `config.py`（55 行）。它从环境变量读配置，带一个合理的优先级：
+最后串一下 `config.py`（60 行）。它从环境变量读配置，带一个合理的优先级：
 
 ```python
 api_key = (
