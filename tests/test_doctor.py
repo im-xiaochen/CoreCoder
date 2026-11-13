@@ -46,3 +46,14 @@ def test_entry_routes_doctor_without_loading_cli():
     assert result.returncode in (0, 1)
     assert '"checks"' in result.stdout
     assert not result.stderr
+
+
+def test_dotenv_case_normalization_matches_platform(tmp_path):
+    (tmp_path / ".env").write_text("corecoder_max_tokens=broken\nCORECODER_MAX_TOKENS=4096\n")
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT)
+    env.pop("CORECODER_MAX_TOKENS", None)
+    env.pop("PYTHON_DOTENV_DISABLED", None)
+    result = subprocess.run([sys.executable, "-m", "corecoder", "doctor", "--json"], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    check = next(c for c in json.loads(result.stdout)["checks"] if c["id"] == "config.corecoder_max_tokens")
+    assert check["status"] == ("fail" if os.name == "nt" else "pass")

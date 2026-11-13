@@ -53,8 +53,9 @@ def main(argv=None):
             finally:
                 logger.disabled = was_disabled
             for key, value in values.items():
-                if value is not None and key not in env:
-                    env[key] = value
+                effective_key = key.upper() if os.name == "nt" else key
+                if value is not None and effective_key not in env:
+                    env[effective_key] = value
         add("config.dotenv", "pass", "Local configuration was checked.", "")
     except (ImportError, OSError, ValueError, UnicodeError):
         add("config.dotenv", "warn", "Local configuration could not be checked.", "Check the .env file and python-dotenv installation.")
