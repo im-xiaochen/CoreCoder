@@ -5,10 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-def _load_dotenv():
-    """Load .env from cwd, walking up to home dir."""
-    from dotenv import load_dotenv
-
+def _dotenv_path():
+    """Find the same .env file used by startup."""
     # search cwd first, then parent dirs up to ~
     env_path = Path(".env")
     if not env_path.exists():
@@ -20,7 +18,14 @@ def _load_dotenv():
                 env_path = candidate
                 break
             cur = cur.parent
-    load_dotenv(env_path, override=False)
+    return env_path
+
+
+def _load_dotenv():
+    """Load .env from cwd, walking up to home dir."""
+    from dotenv import load_dotenv
+
+    load_dotenv(_dotenv_path(), override=False)
 
 
 @dataclass
