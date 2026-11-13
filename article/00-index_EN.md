@@ -18,9 +18,9 @@ I assume you've written code, called an API, roughly know how LLM function calli
 
 The answer is engineering. And the kind that, once you've read it, makes you think "that's it? I could write that too."
 
-## How to read the eight pieces
+## How to read the nine pieces
 
-The first six chapters unpack the core and its interfaces. Chapter seven builds a working extension, and chapter eight shows where tools, hooks, and session modes attach.
+The first six chapters unpack the core and its interfaces. Chapter seven builds a working extension, chapter eight shows where tools, hooks, and session modes attach, and chapter nine follows a change through Git review, project checks, and offline evaluation.
 
 1. [An agent is, at heart, a while loop](01-the-loop_EN.md). Follow `Agent.chat_result()` through context checks, run limits, tool replies, and cancellation.
 2. [The tool system: letting the model act, safely](02-tools_EN.md). Meet the nine built-in tools, including `repo_map`, and add a tool to the session's registry.
@@ -30,6 +30,8 @@ The first six chapters unpack the core and its interfaces. Chapter seven builds 
 6. [Turning it into a real command-line tool](06-session-and-cli_EN.md). Start with saved sessions, slash commands, and JSON results, then follow the Web workbench as it reconnects to a run.
 7. [Fork CoreCoder and build your own coding agent](07-build-your-own_EN.md). Add and test a custom tool, then use the agent as a library.
 8. [MCP, hooks, and plan mode](08-extensibility_EN.md). See how the stdio client discovers tools, how hooks observe calls, and how the workbench distinguishes code, plan, and chat.
+
+9. [From code change to handoff: Git review, project checks, and offline evaluation](09-review-and-verify_EN.md). Inspect a change in the workbench, run the project's checks, and test CoreCoder itself with an offline fixture.
 
 You don't have to read in order. Want to understand how it dares to run commands on its own? Jump to piece two. Want to plug in your own model? Jump to piece three. Just want to fork something usable fast? Piece seven stands on its own.
 

@@ -6,13 +6,13 @@
 
 *learn from it · fork it · ship something better*
 
-[中文](README_CN.md) | English | [Source-reading series · 8 bilingual essays](article/00-index_EN.md)
+[中文](README_CN.md) | English | [Source-reading series · 9 bilingual essays](article/00-index_EN.md)
 
 [![PyPI](https://img.shields.io/pypi/v/corecoder)](https://pypi.org/project/corecoder/)
 [![Engine](https://img.shields.io/badge/engine-2572_LoC-blue)](corecoder)
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
+[![Tests](https://github.com/im-xiaochen/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/im-xiaochen/CoreCoder/actions)
 [![essays](https://img.shields.io/badge/source--reading-8_bilingual-orange)](article/00-index_EN.md)
 
 </div>
@@ -49,14 +49,14 @@ The code came out of a public teardown: open analyses have already exposed a lot
 
 <p align="center"><sub><i>These thousand lines really do run a full loop end to end: ask it to fix buggy.py and it reads the file, edits the code, runs it once to confirm, then reports back on its own. Watch it, then come back and read the code.</i></sub></p>
 
-This README follows the same arc: the first half helps you **read it** (the code map, the main loop, eight essays), the second half helps you **fork it** and points at a few directions worth pushing further.
+This README follows the same arc: the first half helps you **read it** (the code map, the main loop, nine essays), the second half helps you **fork it** and points at a few directions worth pushing further.
 
 ## Run it once first (five minutes before you read)
 
 Before you read the source, get it running on your machine once to build some intuition. It's a foundation meant for forking, so the recommended path is to clone it and install editable, reading and changing as you go:
 
 ```bash
-git clone https://github.com/he-yufeng/CoreCoder
+git clone https://github.com/im-xiaochen/CoreCoder
 cd CoreCoder
 pip install -e .
 ```
@@ -160,19 +160,20 @@ Plan mode permits this read-only team form after the normal authorization check.
 
 Every one of these *whys* is traced down to the actual lines of code in the series below.
 
-## The source-reading series · 8 bilingual essays
+## The source-reading series · 9 bilingual essays
 
-I also wrote a bilingual source-reading series, one intro plus eight parts, each in Chinese with an English mirror. Against CoreCoder's actual code, it walks through how agents like Claude Code work under the hood. One hard rule I set myself: every line count and every snippet is re-read and re-checked from the repo, never written from memory. The first six get you reading, the seventh gets you forking, and the eighth is about extending it without touching the loop; read them in any order.
+The bilingual source-reading series includes an introduction and nine chapters. Follow CoreCoder's loop, tools, and session handling, then build an extension or walk through Git review and verification. Each chapter links to the corresponding implementation.
 
 - **[Intro · Read Claude Code through CoreCoder, then build your own](article/00-index_EN.md)**
 - **[01 · An agent, at its core, is a `while` loop](article/01-the-loop_EN.md)** — the main loop in `agent.py`, interrupts, and the round limit
 - **[02 · The tool system: letting the model act, safely](article/02-tools_EN.md)** — the nine tools in `tools/` and the bash safety gate
 - **[03 · Plug in any LLM, and keep the bill honest](article/03-llm-and-cost_EN.md)** — `llm.py`'s provider wrapper, retries, and cost accounting
 - **[04 · Surviving a long task on a finite window](article/04-context_EN.md)** — `context.py`'s three-tier compaction and orphaned tool messages
-- **[05 · Parallel execution and sub-agents](article/05-parallel-and-subagents_EN.md)** — thread-pool concurrency and sub-agent isolation
-- **[06 · Turning it into a real command-line tool](article/06-session-and-cli_EN.md)** — `session.py` and path-traversal defense
+- **[05 · Parallel execution and sub-agents](article/05-parallel-and-subagents_EN.md)** — read-only teams, task dependencies, and sub-agent isolation
+- **[06 · Turning it into a real command-line tool](article/06-session-and-cli_EN.md)** — saved sessions, structured CLI results, and Web reconnection
 - **[07 · Fork CoreCoder into your own coding agent](article/07-build-your-own_EN.md)** — from fork to custom tools to swapping models
-- **[08 · Three ways to extend without touching the loop: MCP, hooks, and plan mode](article/08-extensibility_EN.md)** — the v0.6.0 extensibility trio and the contract that makes them safe
+- **[08 · Three ways to extend without touching the loop: MCP, hooks, and plan mode](article/08-extensibility_EN.md)** — stdio MCP, hooks, session modes, and project skills
+- **[09 · From code change to handoff](article/09-review-and-verify_EN.md)** — Git review, project checks, and offline evaluation
 
 ## Fork it, build something better
 
@@ -190,14 +191,14 @@ llm = LLM(model="deepseek-chat", api_key="sk-...", base_url="https://api.deepsee
 print(Agent(llm=llm).chat("find every TODO comment in this project and list them"))
 ```
 
-Going deeper, the directions are out in the open too. None of the following is in CoreCoder, by design, not because it's unfinished. Flip it around and each one is an entry point you can carry into a real tool of your own:
+The current implementation also leaves a few directions open for forks:
 
 - **The dangerous-command blocking in bash is just a regex blacklist.** It guards against slips, not a security sandbox. Facing untrusted input means reaching for seccomp or container isolation. This is the hardest of the four; it goes all the way down to the syscall and isolation layer.
-- **Retry is only exponential backoff.** No fallback model, no hard dollar budget. Follow `llm.py` down and add a fallback model chain plus a stop-on-over-budget gate; the change stays mostly inside that one file.
-- **Sub-agents only run the plainest synchronous execution.** Make it async or a streaming executor and you close the exact gap the fifth essay identifies between this and how production agents stream execution.
-- **No RAG, and the MCP client speaks tools only.** Retrieval-based code location for big repos is still open, and `mcp.py` leaves resources and prompts unimplemented on purpose. Either one is a real way to grow from a minimal core into your own stronger agent.
+- **Model fallback.** CoreCoder retries eligible requests and supports per-run budgets. A fallback across providers would need to preserve those limits and make the destination of each request visible.
+- **Isolated editing teams.** The team form already runs read-only tasks in parallel. Extending it to edits would need separate workspaces and a way to review competing changes.
+- **MCP resources and prompts.** The stdio client discovers and invokes tools. Resource and prompt support would extend what it can present to a session.
 
-The README only points; the seventh essay picks up the code details for each. Pick one and start; that's the whole reason the core is kept this small.
+Chapter seven provides a worked example of adding and testing a local tool.
 
 ## Commands
 
@@ -312,6 +313,8 @@ By [Yufeng He](https://github.com/he-yufeng), formerly at Moonshot AI (Kimi). I 
 Project rules: in code and plan modes CoreCoder reads `AGENTS.md` from the workspace root through the current directory, with bounded file sizes. Chat mode does not discover project rules. Use `/rules` in the CLI or the workspace panel on the web to inspect sources and skipped files.
 
 ## Git review, project checks, and offline evaluation
+
+The [change review walkthrough](article/09-review-and-verify_EN.md) follows these features through the Web workbench, CLI, and source code.
 
 Open the Git workspace tab to review HEAD-to-index and index-to-worktree diffs. Select paths and explicitly confirm staging or committing; review tokens reject stale state. Changes observed during a run may also come from external edits.
 
