@@ -13,6 +13,16 @@ jobs:
     environment: pypi
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build bundled workbench
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build -- --outDir ../web_backend/static --emptyOutDir
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
@@ -24,6 +34,12 @@ jobs:
         run: |
           python -m build
           python -m twine check dist/*
+
+      - name: Smoke test installed workbench
+        run: |
+          python -m venv "$RUNNER_TEMP/corecoder-wheel"
+          "$RUNNER_TEMP/corecoder-wheel/bin/python" -m pip install dist/*.whl
+          "$RUNNER_TEMP/corecoder-wheel/bin/python" .github/scripts/check_workbench_wheel.py
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

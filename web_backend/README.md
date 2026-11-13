@@ -8,7 +8,7 @@
 python -m web_backend.server --port 8765 --open
 ```
 
-`--workspace 路径` 可选用其他已存在目录作为 Agent 工作区；模型配置由启动进程的环境和 `.env` 加载。前端构建与完整启动步骤见 [`frontend/README.md`](../frontend/README.md)。此适配层供源码检出使用，不包含在原有 `corecoder` PyPI wheel 中。
+`--workspace 路径` 可选用其他已存在目录作为 Agent 工作区。安装本 fork 构建的发行包后，可用 `corecoder web --open` 启动，默认工作区为当前目录。两种入口都从启动目录查找 `.env`。发行包内的前端位于 `web_backend/static/`，源码入口使用 `frontend/dist/`。构建与启动步骤见 [`frontend/README.md`](../frontend/README.md)。
 
 ## 接口
 

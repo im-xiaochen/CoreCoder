@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hmac
 import json
 import mimetypes
@@ -18,6 +19,8 @@ from corecoder.project_checks import CheckError
 from .service import RequestError, Service
 
 ROOT = Path(__file__).resolve().parents[1]
+DEVELOPMENT_FRONTEND = ROOT / "frontend" / "dist"
+PACKAGED_FRONTEND = Path(__file__).resolve().parent / "static"
 
 
 def make_handler(service: Service, frontend: Path):
@@ -153,7 +156,10 @@ def make_handler(service: Service, frontend: Path):
                     raise RequestError("前端尚未构建。请在 frontend 目录执行 npm install 和 npm run build。", 503)
                 payload = requested.read_bytes()
                 self.send_response(200)
-                mime = mimetypes.guess_type(requested.name)[0] or "application/octet-stream"
+                # Windows MIME registrations vary. ES modules require a JavaScript MIME type.
+                mime = {".js": "text/javascript", ".css": "text/css"}.get(requested.suffix)
+                if mime is None:
+                    mime = mimetypes.guess_type(requested.name)[0] or "application/octet-stream"
                 self.send_header("Content-Type", mime + ("; charset=utf-8" if mime.startswith("text/") else ""))
                 self.send_header("Content-Length", str(len(payload)))
                 self.send_header("Cache-Control", "no-cache")
@@ -233,29 +239,49 @@ def make_handler(service: Service, frontend: Path):
     return Handler
 
 
-def main():
-    parser = argparse.ArgumentParser(description="CoreCoder local web workbench")
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--workspace", type=Path, default=ROOT)
+def _serve(argv, *, prog, workspace, frontend, require_assets):
+    parser = argparse.ArgumentParser(prog=prog, description="CoreCoder local web workbench")
+    parser.add_argument("--port", type=int, default=8765, help="Loopback port (0 selects an available port)")
+    parser.add_argument("--workspace", type=Path, default=workspace, help="Directory to open in the workbench")
     parser.add_argument("--open", action="store_true", help="Open the workbench in your browser")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not args.workspace.is_dir():
         parser.error("workspace must be an existing directory")
-    service = Service(args.workspace)
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(service, ROOT / "frontend" / "dist"))
-    url = f"http://127.0.0.1:{args.port}"
-    print(f"CoreCoder Workbench: {url}", flush=True)
-    print(f"Workspace: {service.workspace}", flush=True)
-    print("Press Ctrl+C to stop. API key stays on the backend.", flush=True)
-    if args.open:
-        threading.Timer(0.5, webbrowser.open, args=(url,)).start()
+    if not 0 <= args.port <= 65535:
+        parser.error("port must be between 0 and 65535")
+    if require_assets and not (frontend / "index.html").is_file():
+        parser.error("workbench assets are missing. Install a built CoreCoder distribution or run npm ci and npm run build in frontend/")
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        for session in service.sessions.values():
-            service.stop(session.id)
-    finally:
-        server.server_close()
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), BaseHTTPRequestHandler)
+    except OSError as exc:
+        if exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048:
+            parser.error(f"port {args.port} is already in use on 127.0.0.1. Choose another with --port or use --port 0")
+        parser.error(f"could not bind to 127.0.0.1:{args.port}: {exc}. Try another port or use --port 0")
+
+    # Bind before loading extensions and recovering runs, so a port conflict leaves state alone.
+    with server:
+        service = Service(args.workspace)
+        server.RequestHandlerClass = make_handler(service, frontend)
+        url = f"http://127.0.0.1:{server.server_port}"
+        print(f"CoreCoder Workbench: {url}", flush=True)
+        print(f"Workspace: {service.workspace}", flush=True)
+        print("Press Ctrl+C to stop. API key stays on the backend.", flush=True)
+        if args.open:
+            threading.Timer(0.5, webbrowser.open, args=(url,)).start()
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            for session in service.sessions.values():
+                service.stop(session.id)
+
+
+def workbench_main(argv=None):
+    frontend = PACKAGED_FRONTEND if (PACKAGED_FRONTEND / "index.html").is_file() else DEVELOPMENT_FRONTEND
+    return _serve(argv, prog="corecoder web", workspace=Path.cwd(), frontend=frontend, require_assets=True)
+
+
+def main():
+    return _serve(None, prog=None, workspace=ROOT, frontend=DEVELOPMENT_FRONTEND, require_assets=False)
 
 
 if __name__ == "__main__":
