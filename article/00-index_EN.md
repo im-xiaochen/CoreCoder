@@ -2,15 +2,15 @@
 
 This is a series for engineers. It sets out to do two things.
 
-First, use CoreCoder, an open source project whose core runs to about twenty-two hundred lines, to lay out clearly how a production-grade coding agent like Claude Code is built on the inside. Second, walk you through forking CoreCoder and turning it into a coding agent of your own.
+First, use CoreCoder, a small open source project written in Python, to lay out clearly how a production-grade coding agent like Claude Code is built on the inside. Second, walk you through forking CoreCoder and turning it into a coding agent of your own.
 
 ## Why take the detour
 
 Because Claude Code itself is too big. Its codebase runs into the hundreds of thousands of lines, and the BashTool alone, the part that runs shell commands, is over a thousand. Read it line by line and most people close the editor by the third file. Yet the core of an agent isn't really that complicated. What's complicated is everything engineered around it to survive the real world: what to do when the model gets interrupted mid-stream, when the context window fills up, when ten tool calls come back at once, when a provider hiccups and returns a 500. Spread across hundreds of thousands of lines, that skeleton is hard to see.
 
-What CoreCoder does is squeeze the skeleton down to about twenty-two hundred lines of pure Python. To be precise, the agent engine (the loop, model interface, context, tools, session) is 2,240 lines once you drop blank lines and comments; add the outermost CLI terminal, config, and packaging and the whole package is 4,156 lines without blanks and comments, 4,883 physical. Every file is short enough to read in one sitting, and what runs is genuinely an agent: it edits code, runs commands, spins up its own subtasks, compresses context, tracks cost. It is not a toy. It takes every design decision a production agent makes, picks the most essential version of each, and writes it out honestly in the least code it can.
+CoreCoder keeps that skeleton small enough to read. The [README](../README.md) tracks the current line counts. The same core runs the CLI and the Web workbench. It can inspect a repository, edit files with approval, dispatch read-only teams, and report what a run spent. That's enough machinery to trace a real request from the user's prompt to the model, through the tools, and back to the user.
 
-Reading it is close to reading a runnable, annotated edition of Claude Code. The difference is that every line of CoreCoder is something you can breakpoint, change, run, and watch on your own machine. Every line count and every snippet I quote in this series is read straight out of the repository, not recalled from memory. I'll keep being pedantic about that, because in the coding-agent space far too many write-ups just make the numbers up.
+Each chapter points to the implementation. Where a snippet leaves out bookkeeping, it says so. The source links are where to look when you're ready to follow every branch.
 
 ## Who this series assumes you are
 
@@ -20,16 +20,16 @@ The answer is engineering. And the kind that, once you've read it, makes you thi
 
 ## How to read the eight pieces
 
-The first six are about understanding. Each one fixes on a single subsystem of the agent, first describing how Claude Code handles that thing and the tradeoffs it makes, then turning to the real code in CoreCoder to see what the same idea looks like once it's compressed into a few dozen lines. The last piece is about building it yourself, wiring all the parts back together, from fork to a custom tool to swapping the model, landing on something that runs.
+The first six chapters unpack the core and its interfaces. Chapter seven builds a working extension, and chapter eight shows where tools, hooks, and session modes attach.
 
-1. [An agent is, at heart, a while loop](01-the-loop_EN.md). The most central thing in the whole agent is a loop: ask the model, run a tool, feed the result back, ask again. We look at how CoreCoder's `agent.py` (424 lines) writes it out plainly, and how real-world headaches like interruption, a round cap, and backfilling half-finished tool calls each get handled.
-2. [The tool system: letting the model act, safely](02-tools_EN.md). The model on its own only emits text. Tools are what let it read files, write files, run commands. This piece covers CoreCoder's seven tools, with the spotlight on the seemingly unremarkable unique search-and-replace edit that is in fact one of Claude Code's key innovations, plus bash's safety gate. Since v0.6.0 it also carries a "beyond the gates" section on how the three advanced pieces — plan mode, hooks, and MCP — hang off the moments around a call. At the end I'll have you write your first tool.
-3. [Plug in any model, and get the bill right while you're at it](03-llm-and-cost_EN.md). How `llm.py` (612 lines, the largest single file in the engine) uses one OpenAI-compatible interface to catch DeepSeek, Qwen, Kimi, and local Ollama, how it does exponential-backoff retry, and how it tallies tokens and dollar cost right inside the streaming output.
-4. [Surviving a long task in a finite window](04-context_EN.md). The context window is the agent's hard constraint. `context.py` (587 lines) implements three layers of compression, lightest to heaviest. This piece also covers a trap that's easy to hit and that the API will always reject: the orphaned tool message. That's a bug I actually fixed while building this project.
-5. [Parallel execution and sub-agents](05-parallel-and-subagents_EN.md). When the model returns several tool calls at once, CoreCoder runs them concurrently on a thread pool. This piece is honest about where this simplified version falls short of Claude Code's streaming executor, what new trouble concurrency brings in, and why a sub-agent is not allowed to recurse.
-6. [Turning it into a real command-line tool](06-session-and-cli_EN.md). Session save, resume, slash commands, one-shot mode. `session.py` holds an unremarkable but critical security detail: how to stop a malicious session name from turning into a path traversal.
-7. [Fork CoreCoder and build your own coding agent](07-build-your-own_EN.md). The hands-on finale. From clone, to switching to the model you actually use, to adding a genuinely useful custom tool, to tuning the system prompt to shape its style, to packaging and release. After the first six pieces you understand the principles; this one leaves you with something real.
-8. [Three ways to extend without touching the loop: MCP, hooks, and plan mode](08-extensibility_EN.md). The three right ways to grow an agent: `mcp.py` (358 lines) wires remote tools in as first-class citizens, hooks veto a single call with exit code 2 yet can never kill the loop, and plan mode is one boolean that outranks the entire permission layer including `--yes`. The coda folds all three back into one contract: uniform tools, errors as ordinary return values, and a loop its perimeter cannot kill.
+1. [An agent is, at heart, a while loop](01-the-loop_EN.md). Follow `Agent.chat_result()` through context checks, run limits, tool replies, and cancellation.
+2. [The tool system: letting the model act, safely](02-tools_EN.md). Meet the nine built-in tools, including `repo_map`, and add a tool to the session's registry.
+3. [Plug in any model, and get the bill right while you're at it](03-llm-and-cost_EN.md). Follow stream parsing, parameter fallback, same-source reasoning, the usage ledger, and per-run budgets.
+4. [Surviving a long task in a finite window](04-context_EN.md). See how CoreCoder estimates the messages it will send, archives oversized evidence, and keeps tool calls paired with replies.
+5. [Parallel execution and sub-agents](05-parallel-and-subagents_EN.md). Follow parallel read calls, isolated session state, and the dependency scheduler for read-only teams.
+6. [Turning it into a real command-line tool](06-session-and-cli_EN.md). Start with saved sessions, slash commands, and JSON results, then follow the Web workbench as it reconnects to a run.
+7. [Fork CoreCoder and build your own coding agent](07-build-your-own_EN.md). Add and test a custom tool, then use the agent as a library.
+8. [MCP, hooks, and plan mode](08-extensibility_EN.md). See how the stdio client discovers tools, how hooks observe calls, and how the workbench distinguishes code, plan, and chat.
 
 You don't have to read in order. Want to understand how it dares to run commands on its own? Jump to piece two. Want to plug in your own model? Jump to piece three. Just want to fork something usable fast? Piece seven stands on its own.
 
@@ -38,21 +38,21 @@ You don't have to read in order. Want to understand how it dares to run commands
 Before you read, let it run once on your machine, so the code that follows has a feel to it.
 
 ```bash
-git clone https://github.com/he-yufeng/CoreCoder
+git clone https://github.com/im-xiaochen/CoreCoder
 cd CoreCoder
 pip install -e .
 ```
 
-Then give it a model and a key. CoreCoder speaks the OpenAI-compatible interface by default, so a key from any provider works, and switching providers is just two environment variables:
+To try the loop without a key, run `corecoder --demo`. For a live run, pick one configuration below and use the key and model for that endpoint. When switching examples, open a clean shell or unset the previous `OPENAI_BASE_URL` and `CORECODER_MODEL` values.
 
 ```bash
 # OpenAI
 export OPENAI_API_KEY=sk-...
 
-# or DeepSeek, much cheaper, change one base_url
+# or DeepSeek
 export OPENAI_API_KEY=sk-... OPENAI_BASE_URL=https://api.deepseek.com CORECODER_MODEL=deepseek-chat
 
-# or local Ollama, free of charge
+# or a running local Ollama instance
 export OPENAI_API_KEY=ollama OPENAI_BASE_URL=http://localhost:11434/v1 CORECODER_MODEL=qwen2.5-coder
 ```
 
@@ -62,7 +62,7 @@ Run it:
 corecoder
 ```
 
-Once you're in, give it any task, say "read corecoder/agent.py and tell me the most rounds this loop can run." You'll watch it call `read_file` first, then answer you with what it read. What it does in that moment is, in essence, the same thing Claude Code does. The next six pieces take that same thing apart.
+Once you're in, give it any task, say "read corecoder/agent.py and tell me the most rounds this loop can run." If the model chooses `read_file`, the CLI shows the call before streaming the answer. What it does in that moment is, in essence, the same thing Claude Code does. The next six pieces take that same thing apart.
 
 So let's start with that loop.
 

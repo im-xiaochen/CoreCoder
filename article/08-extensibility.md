@@ -1,98 +1,43 @@
-# 不动主循环的三种加法：MCP、钩子与计划模式
+# 给 agent 加东西的三条路：MCP、钩子与计划模式
 
-第七篇结束的时候，你手里已经有一个能跑的 agent 了。接下来你几乎一定会想做三件事：给它接新工具（接进来一个文件系统服务、一个数据库服务），在工具调用前后插一段自己的逻辑（每次跑 bash 前先过一道检查），以及让它偶尔「只许看、不许动」（先出个方案再开工）。这三件事对应 v0.6.0 新增的三块代码：`mcp.py`（358 行）、`hooks.py`（94 行）、以及 `agent.py` 里一个五十行的布尔量。它们的共同点是：都不碰第一到第六篇讲的那个主循环。这一篇讲为什么「不碰主循环」不是克制，而是这三块功能能成立的前提。
+[第七篇](07-build-your-own.md)结束时，你手里已经有一个能跑的 agent 了。接下来很容易想到三件事：接一个别的进程提供的工具，在工具执行前后插一段自己的逻辑，或者先让 agent 调查、等你批准再改文件。它们接在同一条循环的不同位置。
 
 ## MCP：把「协议」裁成「能用的那一片」
 
-MCP（Model Context Protocol）是让 agent 调用外部工具服务的标准。完整协议有生命周期管理、能力协商、资源订阅、提示词模板、采样回调一大堆东西。`mcp.py` 只留了一个 agent 真正用的切面：起进程、握手、问它有哪些工具、调用工具、最后关掉它。
+CoreCoder 的 [MCP 客户端](../corecoder/mcp.py)启动配置好的子进程，在 stdin 和 stdout 上收发逐行的 JSON-RPC。可执行文件和参数放在 `~/.corecoder/mcp.json`。仓库的[文件系统示例](../examples/mcp_filesystem.md)给了完整配置，并说明怎样选服务器能访问的目录。
 
-服务端配置在 `~/.corecoder/mcp.json`：
+客户端先发 `initialize` 和 `notifications/initialized`。服务端声明提供工具时，客户端用 `tools/list` 查清单，按 `nextCursor` 翻页。整个发现过程共享一次启动时限，并限制页数和工具数。游标重复、工具重名、schema 不合法都会使这次发现失败，半截工具清单不会登记进来。
 
-```json
-{"mcpServers": {"fs": {"command": "npx", "args": ["-y", "some-fs-server", "/tmp"]}}}
-```
+每个工具登记成 `mcp__<server>__<tool>`，执行时调用 `tools/call`。一个读线程按请求 ID 对号入座，一把写锁保证往 stdin 写时不会把两条请求搅在一起。服务挂了，CLI 的 `/mcp` 可以查看状态，`/mcp reconnect <名字>` 可以重启。重连要求工具的名字、描述和 schema 保持一致。要登记变更后的工具，重启会话。
 
-每个 server 是一个子进程，走 stdio，一行一个 JSON-RPC 2.0 消息。启动时发 `initialize` 握手，然后 `tools/list` 把远程工具拉下来，每个远程工具改名叫 `mcp__<server>__<tool>` 注册进 agent。改名的作用不只是不撞名：第二篇说过，工具在内核里就一个形状——名字、参数、字符串结果。远程工具改名之后走同一条注册路径，同意层、钩子和主循环看到的跟内建工具一模一样，根本不知道它是外来的。
-
-真正体现工程的是两个线程问题。第一，工具调用是并发的（第五篇），几个线程同时调同一个 server 时，请求和响应怎么对上号？`mcp.py` 起了一个守护线程独占 stdout，每读到一个响应就按 request id 停进 `_responses` 字典，调用方拿自己的 id 去等：
-
-```python
-threading.Thread(target=self._read_loop, args=(self._proc,), daemon=True).start()
-```
-
-第二，stdin 只有一个，两个线程的请求体不能在字节流里搅在一起，所以写操作走一把 `_write_lock`。一个读线程按 id 分发，一把写锁保顺序，stdio 这种「一根管子双向说话」的协议最常用的处理就是这个形状，不用上队列也不用上事件循环。
-
-协议层最克制的地方在出错的时候。server 挂了、超时了、返回了看不懂的东西，怎么处理？
-
-```python
-# a server that hangs or dies fails that one call as an ordinary
-# error string; it never kills the loop
-```
-
-失败只是这一次工具调用返回一个错误字符串，模型读到「这个服务现在不好使」然后自己想办法，主循环连一个异常都看不到。这个选择和第三篇讲模型接口时的原则是同一条：外围世界永远可能坏，内核不能跟着死。服务器真挂了也不是只能重启会话：REPL 里的 `/mcp` 列出每台服务器的状态，`/mcp reconnect <名字>` 起一个新进程、重新握手。agent 手里已有的工具挂在 client 上而不是进程上，新握手一落地就恢复可用。
+对模型循环来说，这些仍是普通的工具调用，要过参数校验、钩子和授权。工具名称和描述写得再清楚，也不会因此进入计划模式的只读集合。
 
 ## 钩子：能否决，但永远杀不死循环
 
-MCP 给 agent 加能力，钩子（hooks）改的是已有工具的行为。定义放在 `~/.corecoder/hooks.json`：
+[钩子](../corecoder/hooks.py)是在工具调用前后运行的本地 shell 命令，配置放在 `~/.corecoder/hooks.json`。下面是配置形状，使用前需要准备自己的本地脚本。
 
 ```json
-{"PreToolUse":  [{"matcher": "bash", "command": "python check.py"}],
- "PostToolUse": [{"matcher": "*",    "command": "./log.sh"}]}
+{"PreToolUse": [{"matcher": "bash", "command": "python check.py"}]}
 ```
 
-每个钩子是一条 shell 命令，内核把这次工具调用以 JSON 喂到它的标准输入。PreToolUse 钩子的退出码是 2 就表示否决这次调用，它的 stderr 会作为否决理由原样回给模型：
+内核把这次调用以 JSON 喂到标准输入。匹配的 `PreToolUse` 退出码是 2 就否决这次调用，stderr 会作为拒绝理由给模型。`PostToolUse` 在工具执行后接收工具名、参数和结果。钩子超时或没启动起来会记一条日志并跳过，后置钩子也不能反过来改写工具是否执行。
 
-```python
-if out is not None and out.returncode == 2:
-    reason = out.stderr.strip() or "no reason given"
-    return "Blocked by hook: " + reason
-```
+顺序值得记住：先校验调用，再跑前置钩子，之后才检查模式和权限。计划模式限制工具执行，本地配置的前置钩子仍可能在拒绝前运行。聊天模式会在运行钩子之前拒绝工具调用。只读团队成员不继承钩子，父 agent 的那次委派仍走原来的流程。想离线看一遍，可以打开[计划与钩子演示](../examples/plan_hooks_demo.py)。
 
-注意这个理由的去向：它不是打印给用户看的，是塞回给模型当工具结果的。模型读到「这次调用被钩子拦了，因为什么」，然后自己决定换个写法还是换个路径。钩子拦的不是人，是模型接下来的行为，所以理由一定要回到模型的上下文里才有意义。
+## 计划模式：先调查，等批准再修改
 
-PostToolUse 钩子只能观察，退出码是什么都不管。还有一个很要紧的兜底：钩子本身也是不可信的外围，它报错、它挂住，怎么办？
+CLI 的 `/plan` 切换计划模式，`approve` 或 `/approve` 结束计划模式并把批准交给模型。Web 工作台则有三种会话模式。
 
-```python
-TIMEOUT = 10  # seconds; a hung hook must not hang the agent
-```
+- **编程**提供当前会话的工具，沿用它的权限设置。CLI 的 `--yes` 可以跳过普通授权确认。
+- **计划**允许 [`Permission.READ_ONLY`](../corecoder/permissions.py) 里的内建工具名，包括仓库检索和会话自己的任务清单。普通写工具即使遇到 `--yes` 也会被拒绝。
+- **聊天**不提供工具 schema，模型仍然发来的工具调用也会被拒绝，同时跳过项目规则发现和技能。
 
-超时跳过，打一条警告继续跑。文件末尾那句注释把整个设计一句话说完了：hooks assist the loop, they never get to kill it。钩子可以否决单次调用，但没有任何一个钩子能让整个 agent 停摆。这条不变量和 MCP 那条是同一个：外围的东西全是客人，客人可以提意见，不能掀桌子。
+计划模式给委派留了一条窄入口：实际的内建 `AgentTool` 或 Web 的 `BrowserAgentTool` 可以收到只有 `tasks` 的调用。工具会校验依赖图，成员拿到受限工具集和各自独立的会话状态。同名的自定义工具和旧式 `task` 单任务都不走这个入口。父 agent 的委派本身仍要过普通权限检查。调度细节见[第五篇](05-parallel-and-subagents.md)。
 
-## 计划模式：五十行的布尔量压住整个权限层
+## 项目规则和技能接在哪
 
-第三件事最少代码。`agent.py` 里就这一个状态：
+编程和计划模式下，[项目规则发现](../corecoder/project_rules.py)会沿工作区根目录到当前目录读取适用的 `AGENTS.md`，并检查文件大小和路径。它们作为项目提示加入系统消息，仍服从用户请求和模式限制。CLI 用 `/rules` 查看加载结果。
 
-```python
-self.plan_mode = False  # toggled by /plan; while on, mutating tools are refused
-```
+技能走另一条显式命令路径。用 `/skills` 看名字、来源和冲突，用 `/<name> [任务]` 调用，重名时指定来源。选中的技能文本为这次任务提供指导，实际能执行的工具由会话权限决定。[第六篇](06-session-and-cli.md)把这些命令放回完整的 CLI 使用流程。
 
-用户敲 `/plan` 把它翻成 True，此后所有写操作类工具一律拒绝，而且它的优先级被 explicitly 放在最顶上：
-
-```python
-# plan mode outranks consent, even --yes: while it's on nothing mutates
-if self.plan_mode and tc.name not in Permission.READ_ONLY:
-```
-
-第二篇讲过权限层的 `--yes` 一键放行，在这里照样被压住：计划模式高于用户自己的「全部同意」。这是一个挺反直觉的排序，但想想就对：用户开 `--yes` 是想少点几次确认，不是想放弃「先让 agent 把方案讲清楚」这个权利。约束的可信度恰恰来自它连最方便的那个后门都没有。
-
-拒绝时的返回值也是花了心思的，它同样是一段写给模型的指令：
-
-```python
-"Plan mode is on, so this call was refused: plan mode is "
-"read-only tools, then present the plan and stop. The user can "
-'approve it by typing "approve", or exit plan mode with /plan.'
-```
-
-模型读到这个，就知道正确的动作是改用只读工具继续调研，然后把方案摆出来停住，等用户敲 approve 或者敲 /plan 解除。一个布尔值加一段精心措辞的拒绝文案，就把「先方案后动手」这个工作流完整逼出来了，不用状态机，不用审批队列。
-
-## 压轴：为什么这三种加法都不用碰内核
-
-把三块放在一起看，会发现它们挂在同一个契约上，这个契约第一到第六篇其实一直在铺：
-
-1. 工具同形。不管什么来源（内建、MCP 远程），工具在内核里都是「名字、参数、字符串结果」三件套，所以权限、钩子、计划模式能一刀切地管到所有工具。
-2. 错误是普通返回值。MCP 服务死了、钩子超时了、调用被拒了，全都是回给模型的一个字符串，没有任何一条以异常形式上涌到主循环。
-3. 循环不被外围杀死。server 挂了不杀循环，钩子挂了不杀循环，计划模式也只是把「不许做」变成模型看得懂的下一步指令。
-
-这三条合起来，就是「不动主循环也能加东西」的结构原因：外围能力想挂进来，只要遵守这个契约，内核根本不用知道它存在。第七篇结尾让你照着造一个自己的 agent，第八篇想说的是：等你真想给它加东西的时候，先想清楚你的东西属于哪一层——是加工具（MCP 的位置）、改行为（钩子的位置）、还是立规矩（计划模式的位置），然后守住同一条契约。守住了，你的内核也可以一直不胖。
-
-系列到这里就先收尾了。从主循环到这层外围，51 万行 Claude Code 拆出来的最核心一课其实不是哪个具体机制，而是这条反复出现的主线：好内核都是小气的，它只认很少的契约，然后把整个世界挡在外面。
+MCP 给会话加工具，钩子接在一次调用前后，模式决定哪些调用能走下去。把这些决定放在工具边界，终端和 Web 工作台就能复用同一套循环。

@@ -6,13 +6,12 @@ Between understanding and building sits a single act of doing. This piece carrie
 
 ## Step zero: get a green baseline
 
-First confirm the starting point is good.
+Start with the version used in this series, a fork of [he-yufeng/CoreCoder](https://github.com/he-yufeng/CoreCoder). Fork it to your own account on GitHub if you want to push your changes.
 
 ```bash
-# fork he-yufeng/CoreCoder to your own account on GitHub, then
-git clone https://github.com/<your-username>/CoreCoder
+git clone https://github.com/im-xiaochen/CoreCoder.git
 cd CoreCoder
-pip install -e .
+python -m pip install -e ".[dev]"
 python -m pytest tests/ -q
 ```
 
@@ -20,7 +19,7 @@ That last line should show the collected tests passing. Don't skip this step. It
 
 ## Step one: plug in your own model
 
-CoreCoder defaults to `gpt-5.5`, but you may not want to use it. Piece three covered this: switching models means switching environment variables. During development I strongly suggest a local Ollama first, costing nothing, free to mess with:
+CoreCoder defaults to `gpt-5.5`, but you may not want to use it. Piece three covered this: switching models means switching environment variables. During development you can use a local Ollama instance to test the flow without remote API charges:
 
 ```bash
 # install Ollama, pull a coder model
@@ -37,71 +36,27 @@ A local model is a notch weaker than a flagship, but it's more than enough for v
 
 ## Step two: add a genuinely useful tool
 
-In piece two we added a `now` that checks the time, too trivial. This time add something useful: let the agent fetch the text content of a web page or an API. With it, your agent can go read online docs, check what an endpoint returns, and its abilities open right up.
-
-Create `corecoder/tools/fetch.py`:
+Create `corecoder/tools/text_stats.py`. The tool receives text directly, so it needs neither workspace state nor network access.
 
 ```python
-"""A read-only tool that fetches the text content of a URL."""
-
-import urllib.request
 from .base import Tool
 
 
-class FetchUrlTool(Tool):
-    name = "fetch_url"
-    description = (
-        "Fetch the text content of an http(s) URL. "
-        "Use this to read documentation, API responses, or web pages."
-    )
+class TextStatsTool(Tool):
+    name = "text_stats"
+    description = "Count characters and whitespace-separated words in text."
+    stateless = True
     parameters = {
         "type": "object",
-        "properties": {
-            "url": {
-                "type": "string",
-                "description": "The http:// or https:// URL to fetch",
-            },
-            "timeout": {
-                "type": "integer",
-                "description": "Timeout in seconds (default 15)",
-            },
-        },
-        "required": ["url"],
+        "properties": {"text": {"type": "string", "maxLength": 10000}},
+        "required": ["text"],
     }
 
-    def execute(self, url: str, timeout: int = 15) -> str:
-        if not url.startswith(("http://", "https://")):
-            return "Error: only http and https URLs are supported"
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "CoreCoder"})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                raw = resp.read(1_000_000)  # read at most 1MB so a giant page can't blow up memory
-                text = raw.decode("utf-8", errors="replace")
-        except Exception as e:
-            return f"Error fetching {url}: {e}"
-        # too long: keep head+tail, the same trick as bash output truncation
-        if len(text) > 8000:
-            text = text[:6000] + f"\n... (truncated, {len(text)} chars) ...\n" + text[-1000:]
-        return text
+    def execute(self, text: str) -> str:
+        return f"characters={len(text)}, words={len(text.split())}"
 ```
 
-Register it in `tools/__init__.py`:
-
-```python
-from .fetch import FetchUrlTool
-
-ALL_TOOLS = [
-    BashTool(),
-    # ...the existing ones...
-    FetchUrlTool(),
-]
-```
-
-Run it and ask "fetch https://raw.githubusercontent.com/he-yufeng/CoreCoder/main/README.md and tell me what this project does," and it'll call `fetch_url` and then explain it to you.
-
-This little tool actually puts several lessons from the earlier pieces to use. Truncation keeping head and tail is the trick that recurred in pieces two and four. Decoding with `errors="replace"` and turning any exception into one line of plain language via a big try-except is also the "don't pass bad data's buck to the user" you've seen all along. And there's the one from piece five that matters most to take to heart: can your tool withstand being called concurrently? This `fetch_url` can, because it has no shared mutable state at all; each call brings its own URL and produces its own result, and two threads running it at once don't interfere. That isn't luck, it's design. A tool you can make stateless, don't add state to; that's the most effortless way to make your tool concurrency-safe by default.
-
-But, just as piece two did with bash, I have to put one of this tool's soft spots on the table. This `fetch_url` has a real security weakness called SSRF: it can access any URL, which includes `http://localhost`, intranet addresses, and that notorious cloud metadata endpoint `http://169.254.169.254`. Using it yourself on your own machine, no big deal. But the moment you wire this agent into a scenario that executes a stranger's instructions, this tool becomes a hole through which someone probes your intranet. To plug it, you'd parse the URL into an IP inside `execute` and block private address ranges and loopback. I deliberately didn't write that part, to let you clearly see what this hole looks like rather than hiding it and pretending it doesn't exist. Every time you add a tool that can take an outward action, first ask "what's the worst this could be used for," and that habit is worth more than any specific piece of protective code.
+In `corecoder/tools/__init__.py`, add `from .text_stats import TextStatsTool` alongside the imports, then add `TextStatsTool(),` to the list returned by `create_tools(state)`. Restart CoreCoder in code mode and ask it to run text_stats on "hello world". The tool reports 11 characters and two whitespace-separated words.
 
 ## Step three: tune its temperament
 
@@ -119,22 +74,19 @@ These rules directly shape how it works. Want it more cautious, add "ask for con
 
 CoreCoder's top level exports `Agent`, `LLM`, `Config`, which means you're not limited to its interactive terminal; you can use it as a library and build an agent of an entirely different form.
 
-Here's an interesting example. Pieces one and five covered how each `Agent` only knows its own tool set. Exploiting this, we can assemble a "read-only" code-review agent that is physically incapable of changing your files or running commands, because we simply never gave it the write tool or bash:
+To make a code-review agent with a narrow tool set, pass just the read, search, and file-listing tools when you create it.
 
 ```python
-from corecoder import Agent, LLM
-from corecoder.tools import get_tool
+from corecoder import Agent, Config, LLM
+from corecoder.tools import create_tools
 
-llm = LLM(
-    model="deepseek-chat",
-    api_key="sk-...",
-    base_url="https://api.deepseek.com",
-)
+config = Config.from_env()
+llm = LLM(model=config.model, api_key=config.api_key, base_url=config.base_url)
 
 # only read, search, and find-files; no write_file, no bash
 reviewer = Agent(
     llm=llm,
-    tools=[get_tool("read_file"), get_tool("grep"), get_tool("glob")],
+    tools=[tool for tool in create_tools() if tool.name in {"read_file", "grep", "glob"}],
     max_rounds=15,
 )
 
@@ -144,42 +96,40 @@ report = reviewer.chat(
 print(report)
 ```
 
-This `reviewer` is an agent safe enough that you'd dare run it inside automation. It can read through and search the entire codebase, but it can't change a single byte or run a single command, because those tools simply aren't in its tool set. This is exactly the usage planted back when piece one stressed "the tool set is instance-level": the cleanest way to constrain what an agent can do isn't to write a pile of rules begging it not to misbehave, but to withhold the capability at the source. The tools you give it are the whole boundary of what it can do.
+The explicit list limits which tools this agent can call. Model requests still send relevant tool output to the configured provider. Keep the workspace and inputs appropriate for that provider.
 
-Used as a library, you can build far more than a CLI: a review bot running in CI, a chat endpoint hooked into a web backend, a script batch-processing a heap of repos. The kernel is just over thirteen hundred lines, and what shell you wrap around it is up to you.
+The same embedding interface can serve an internal code reviewer or a web backend.
 
 ## Step five: pair your change with a test
 
-After adding `fetch_url`, write it a test while you're at it, in the same style as the project's other tools. Add to `tests/test_tools.py`:
+Add this test to `tests/test_tools.py`. It exercises the real registry as well as the tool output, so forgetting to register the tool fails the test.
 
 ```python
-def test_fetch_rejects_non_http():
-    fetch = get_tool("fetch_url")
-    r = fetch.execute(url="file:///etc/passwd")
-    assert "only http" in r
+from corecoder.tools import create_tools
+
+
+def test_text_stats_is_registered():
+    tool = next(tool for tool in create_tools() if tool.name == "text_stats")
+    args = {"text": "hello world"}
+    assert tool.validate_arguments(args) is None
+    assert tool.execute(**args) == "characters=11, words=2"
 ```
 
-Then `python -m pytest tests/ -q`, and watch it gain one passing test.
+```sh
+python -m pytest tests/test_tools.py::test_text_stats_is_registered -q
+```
 
-I single out this step because it's the watershed between "dabbling" and "doing it seriously." The most valuable designs in the first six pieces, the defense against orphaned tool messages, concurrency safety, the two gates against path traversal, all come paired with tests. These tests aren't a formality written for others to see; they solidify an invariant hidden in your head, so that the you of three months from now, or whoever takes over, knows immediately on breaking it. Every capability you add to the agent is worth a test to pin its boundary down. This is the work habit this project means to teach you along the way.
+When you add a built-in tool, update `test_tool_count` to match the new registry total. Starting with nine, adding only `TextStatsTool` makes ten. Keeping `NowTool` from piece two as well makes eleven. The full suite also checks the source line totals documented in the README.
 
 ## Where you can go further
 
-CoreCoder is a starting point, not a destination. It deliberately leaves blanks in quite a few places, and every one is a direction you can build out, and the earlier pieces mostly named them by name:
-
-- **Put a real sandbox on bash.** Piece two said it plainly, the regex blocklist is only a guard against slips, not a security boundary. To face untrusted input, you need `seccomp` or container-level isolation.
-- **Add a fallback model and a hard dollar budget.** Piece three covered how CoreCoder deliberately skipped these two, because they drag in provider-specific logic. For a production deployment, these two eventually have to be added.
-- **Make concurrency finer-grained.** Piece five's point about distinguishing whether a tool "reads" or "writes" to decide whether it can run concurrently is something CoreCoder still doesn't do, and is worth filling in seriously.
-- **Hook up MCP.** Let your agent plug into the Model Context Protocol tool ecosystem, instantly connecting to a large batch of ready-made external capabilities.
-- **Give sub-agents more modes.** Piece five mentioned Claude Code's sub-agents can run in an independent worktree or in the background, while CoreCoder only did the most plain synchronous one.
-
-Pick one you genuinely need and do it. Don't let the length of the list make you anxious; the charm of an agent is exactly that its core is small enough for one person to read through in a weekend, and its frontier is open enough that you can grow in any direction.
+Try adding one capability you will actually use. Make the permission boundary explicit, test the ordinary entry point, and decide what evidence users should get back. [Piece eight](08-extensibility_EN.md) shows where MCP, hooks, modes, and project skills fit.
 
 ## A last word
 
 If this series leaves you with only one thing, I hope it's this: a coding agent is less mysterious than it seems, it's just a stack of engineering decisions you can fully reach, piled up.
 
-Looking back over the six pieces, it's really only a few blocks. A capped loop (piece one), plus a set of clean-interfaced tools that let it act (piece two). The model interface is a thin provider wrapper (piece three), and context fights forgetting with layered compression (piece four). It can split itself and run concurrently, on the strength of restraint about shared state (piece five); the outermost CLI emits events, handles presentation, and plugs the path-traversal hole while it's at it (piece six). The engine adds up to just over thirteen hundred lines, and even with that CLI shell on top the whole package is only 4,156, with not a single spot you can't understand.
+The main loop, tool registration, model adapter, context preparation, team scheduler, and CLI each give you a place to start reading.
 
 Now you don't just understand it, you've forked it, plugged in your own model, added your own tool, and tuned its own temperament. It's yours.
 
