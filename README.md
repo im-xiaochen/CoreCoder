@@ -2,7 +2,7 @@
 
 # CoreCoder
 
-**The nanoGPT of coding agents. A 2,572-line engine inside 6,848 lines of Python: understand how a coding agent actually works, then fork your own.**
+**The nanoGPT of coding agents. A 2,572-line engine inside 6,851 lines of Python: understand how a coding agent actually works, then fork your own.**
 
 *learn from it · fork it · ship something better*
 
@@ -25,7 +25,7 @@
 
 | | CoreCoder | Claude Code | aider | nanoGPT |
 |---|---|---|---|---|
-| Lines of code | 2,572 engine / 6,848 total (7,772 physical) | hundreds of thousands (closed) | tens of thousands of Python | ~600 (two files) |
+| Lines of code | 2,572 engine / 6,851 total (7,775 physical) | hundreds of thousands (closed) | tens of thousands of Python | ~600 (two files) |
 | Time to read it all | one afternoon | can't (closed) | a few days of slogging | one afternoon |
 | Breakpoint, change, rerun? | yes, every line | no | yes, but there's a lot | yes |
 | What it's for | understand one, then fork your own | production coding assistant | terminal pair-programming | minimal GPT for teaching |
@@ -36,7 +36,7 @@ The nanoGPT column is there as a reference point: minimal, readable, but it teac
 
 I've always felt coding agents get talked about as if they were arcane. Strip a tool like Claude Code or Cursor all the way down and the core is a `while` loop wrapped around a large model, plus seven or eight tools that let it actually do things. The hard part was never the loop; it's everything the loop has to cope with once it meets the real world. CoreCoder is the minimal version that writes that core out honestly.
 
-The `corecoder` package contains 44 files and 7,772 physical lines (6,848 net, excluding comment-only and blank lines). The growth since the original snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation, usage accounting and read-only teams.
+The `corecoder` package contains 44 files and 7,775 physical lines (6,851 net, excluding comment-only and blank lines). The growth since the original snapshot includes plan mode, hooks, checkpoints, request budgeting, tool validation, usage accounting and read-only teams.
 
 And it really runs: reads and writes files, executes shell, spawns sub-agents, budgets requests and archives context, and tells you the tokens and dollars a run burned whenever you ask. Anything that would mutate your disk or run a command stops for your consent first. The regression suite checks these behaviors. But the point of it running isn't to become your daily driver. It runs so the walkthrough can't lie: a reference that shows how an agent works has to actually work.
 
@@ -80,6 +80,12 @@ Smoke-tested end to end (read the file, edit it, run it, report back) against De
 corecoder                                             # interactive REPL
 corecoder -p "add error handling to parse_config()"   # one-shot mode, exits when done
 ```
+
+## Web workbench
+
+From your project directory, run `corecoder web --open` to open the workbench at <http://127.0.0.1:8765>. The built distribution from this fork includes the UI and serves it locally without Node.js. Use `--workspace PATH` to select another project, `--port 8766` if the default port is busy, or `--port 0` to select an available port automatically. Model configuration uses the environment and the `.env` found from the launch directory.
+
+For a source checkout, see the [workbench development and build instructions](frontend/README.md).
 
 ## Read it: the code map
 

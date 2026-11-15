@@ -35,8 +35,12 @@ dependencies = [
     "jsonschema>=4.23,<5",
 ]
 
+[tool.hatch.build]
+artifacts = ["/web_backend/static/**"]
+
 [tool.hatch.build.targets.wheel]
-packages = ["corecoder"]
+packages = ["corecoder", "web_backend"]
+exclude = ["/web_backend/tests", "/web_backend/README.md"]
 
 [project.optional-dependencies]
 litellm = ["litellm>=1.60.0,<2.0.0"]

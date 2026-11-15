@@ -2,7 +2,17 @@
 
 独立的 React + TypeScript + Vite 前端。布局参考 Codex：左侧对话列表、中间任务与消息、右侧工作区面板。前端通过 HTTP / SSE 调用 `web_backend`，不导入 Python 代码，也不持有模型 API Key。
 
-## 启动
+## 从发行包启动
+
+安装本 fork 构建的发行包后，在要打开的项目目录运行：
+
+```sh
+corecoder web --open
+```
+
+前端已包含在发行包中，运行时无需 Node.js。默认只监听 `127.0.0.1:8765`。可传 `--workspace 路径`、`--port 8766` 或 `--port 0`（自动选端口）。省略 `--open` 时，终端会显示访问地址。按 `Ctrl+C` 停止服务。
+
+## 从源码启动
 
 在项目根目录执行（Windows PowerShell）：
 
@@ -41,6 +51,20 @@ npm.cmd run dev
 ```
 
 访问 <http://127.0.0.1:5173>。Vite 将 `/api` 代理到 `127.0.0.1:8765`，开发期间前端自动热更新。后端默认提供 `frontend/dist`，不依赖开发服务器。
+
+## 构建发行包
+
+发布前从仓库根目录执行：
+
+```sh
+cd frontend
+npm ci
+npm run build -- --outDir ../web_backend/static --emptyOutDir
+cd ..
+python -m build
+```
+
+这会把生产前端纳入 wheel 和源码分发包，安装任一发行包时都无需重新构建前端。从 Git 检出的源码不包含这些构建产物。
 
 ## 已接入的功能
 
