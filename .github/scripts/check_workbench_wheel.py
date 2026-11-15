@@ -56,6 +56,13 @@ def main():
                 assert bootstrap["token"]
                 assert bootstrap["key_configured"] is True
                 assert key not in body
+                port = base.rsplit(":", 1)[1]
+                collision = subprocess.run(
+                    [str(executable), "web", "--port", port],
+                    cwd=workspace, env=env, capture_output=True, text=True, encoding="utf-8", timeout=10,
+                    check=False,
+                )
+                assert collision.returncode == 2 and "--port 0" in collision.stderr, collision.stderr
             finally:
                 if process.poll() is None:
                     process.terminate()

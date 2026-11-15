@@ -8,6 +8,7 @@ import hmac
 import json
 import mimetypes
 import queue
+import socket
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,6 +22,16 @@ from .service import RequestError, Service
 ROOT = Path(__file__).resolve().parents[1]
 DEVELOPMENT_FRONTEND = ROOT / "frontend" / "dist"
 PACKAGED_FRONTEND = Path(__file__).resolve().parent / "static"
+
+
+class WorkbenchServer(ThreadingHTTPServer):
+    # On Windows, SO_REUSEADDR can let a second server bind to an active port.
+    allow_reuse_address = not hasattr(socket, "SO_EXCLUSIVEADDRUSE")
+
+    def server_bind(self):
+        if not self.allow_reuse_address:
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 def make_handler(service: Service, frontend: Path):
@@ -252,7 +263,7 @@ def _serve(argv, *, prog, workspace, frontend, require_assets):
     if require_assets and not (frontend / "index.html").is_file():
         parser.error("workbench assets are missing. Install a built CoreCoder distribution or run npm ci and npm run build in frontend/")
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), BaseHTTPRequestHandler)
+        server = WorkbenchServer(("127.0.0.1", args.port), BaseHTTPRequestHandler)
     except OSError as exc:
         if exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048:
             parser.error(f"port {args.port} is already in use on 127.0.0.1. Choose another with --port or use --port 0")
